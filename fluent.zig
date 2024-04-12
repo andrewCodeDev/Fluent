@@ -12,9 +12,7 @@ pub fn init(slice: anytype) FluentInterface(DeepChild(@TypeOf(slice)), isConst(@
 }
 
 fn FluentInterface(comptime T: type, comptime is_const: bool) type {
-
     return struct {
-    
         const Self = @This();
 
         pub const DataType = T;
@@ -27,7 +25,7 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
         // and dispatch to different versions of this thing
         // depending on the circumstance.
         items: SliceType,
-    
+
         pub usingnamespace Backend(Self);
     };
 }
@@ -38,16 +36,15 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
 //////////////////////////////////
 // ImmutableBackend:
 
-// Used by mutable backend - only suports non-mutating 
+// Used by mutable backend - only suports non-mutating
 // operations over items. Primarily used for reducing,
 // scanning, and indexing. Provides non-mutating iterator
 // support for both Immutable and Mutable backends.
 
 fn ImmutableBackend(comptime Self: type) type {
     return struct {
-
         pub fn findFrom(
-            self: Self, 
+            self: Self,
             comptime mode: std.mem.DelimiterType,
             start_index: usize,
             needle: DelimiterParam(Self.DataType, mode),
@@ -58,26 +55,46 @@ fn ImmutableBackend(comptime Self: type) type {
                 .sequence => std.mem.indexOfPos(Self.DataType, self.items, start_index, needle),
             };
         }
-        
+
         pub fn find(
-            self: Self, 
+            self: Self,
             comptime mode: std.mem.DelimiterType,
             needle: DelimiterParam(Self.DataType, mode),
         ) ?usize {
             return findFrom(self, mode, 0, needle);
         }
 
-        pub fn get(self: Self, idx: anytype) Self.DataType {
-            return self.items[wrapIndex(self.items.len, idx)];
+        // TODO: make conversion function for integers that handles all this?
+        pub fn at(self: Self, int: anytype) Self.DataType {
+            switch (@typeInfo(@TypeOf(int))) {
+                .Int => |i| {
+                    if (comptime i.signedness == .unsigned) {
+                        return self.items[int];
+                    } else {
+                        const u: usize = @abs(int);
+                        return self.items[if (int < 0) self.items.len - u else u];
+                    }
+                },
+                .ComptimeInt => {
+                    if (comptime int > 0) {
+                        return self.items[int];
+                    } else {
+                        const u: usize = comptime @abs(int);
+                        return self.items[if (int < 0) self.items.len - u else u];
+                    }
+                    return self.items[if (comptime int < 0) @as(isize, @intCast(self.items.len)) + int else int];
+                },
+                else => @compileError("At requires integer type parameter."),
+            }
         }
 
-        // NOTE: 
+        // NOTE:
         //  using slices here because this makes it directly
         //  obvious that we're support any kind of slice and
-        //  both Mutable and Immutable backends. 
+        //  both Mutable and Immutable backends.
 
         pub fn order(self: Self, items: []const Self.DataType) Order {
-            return std.mem.order(Self.DataType, self.items, items);            
+            return std.mem.order(Self.DataType, self.items, items);
         }
         pub fn equal(self: Self, items: []const Self.DataType) bool {
             return order(self, items) == .eq;
@@ -104,16 +121,16 @@ fn ImmutableBackend(comptime Self: type) type {
         // Iterator support ///////////////////////////////
 
         pub fn split(
-            self: Self, 
-            comptime mode: std.mem.DelimiterType, 
+            self: Self,
+            comptime mode: std.mem.DelimiterType,
             delimiter: DelimiterParam(Self.DataType, mode),
         ) std.mem.SplitIterator(Self.DataType, mode) {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
         }
 
         pub fn tokenize(
-            self: Self, 
-            comptime mode: std.mem.DelimiterType, 
+            self: Self,
+            comptime mode: std.mem.DelimiterType,
             delimiter: DelimiterParam(Self.DataType, mode),
         ) std.mem.TokenIterator(Self.DataType, mode) {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
@@ -131,12 +148,11 @@ fn ImmutableBackend(comptime Self: type) type {
 fn MutableBackend(comptime Self: type) type {
     return struct {
 
-
         // includes operations like reduce, find, and iterators
         pub usingnamespace ImmutableBackend(Self);
 
         // calls std.sort.block
-        pub fn sort(self: Self, comptime mode: enum{ asc, desc }) Self {
+        pub fn sort(self: Self, comptime mode: enum { asc, desc }) Self {
             const SF = SortFunction(Self.DataType);
             const func = if (mode == .asc) SF.lessThan else SF.greaterThan;
             std.sort.block(Self.DataType, self.items, void{}, func);
@@ -163,6 +179,25 @@ fn MutableBackend(comptime Self: type) type {
         // can be vectorized, we should probably provide member
         // functions for those and make them no-ops if they don't
         // apply.
+        pub fn abs(self: Self) Self {
+            return switch (@typeInfo(@TypeOf(self.DataType))) {
+                .Int => |i| {
+                    if (i.signedness == .unsigned) return (self);
+                    switch (i.bits) {
+                        8 => {
+                            return (self);
+                        },
+                        16, 32, 64, 128 => {
+                            // simd stuff
+                            @panic("WIP : Not implemented yet\n");
+                        },
+                        else => {
+                            for (self.items) |*x| x.* = @abs(x.*);
+                        },
+                    }
+                },
+            };
+        }
 
         // Another option is to compose backends for math-ish operations
         // that don't make sense across types and only expose them if
@@ -189,7 +224,7 @@ fn SortFunction(comptime T: type) type {
 
 fn isConst(comptime T: type) bool {
     switch (@typeInfo(T)) {
-        .Pointer => |ptr| return ptr.is_const, 
+        .Pointer => |ptr| return ptr.is_const,
         else => @compileError("Type must coercible to a slice."),
     }
 }
@@ -214,35 +249,20 @@ fn DeepChild(comptime T: type) type {
     };
 }
 
-inline fn wrapIndex(len: usize, idx: anytype) usize {
-    switch (@typeInfo(@TypeOf(idx))) {
-        .Int => |i| {
-            if (comptime i.signedness == .unsigned) {
-                return idx;
-            } else {
-                const u: usize = @abs(idx);
-                return if (idx < 0) len - u else u;
-            }
-        },
-        .ComptimeInt => {
-            const u: usize = comptime @abs(idx);
-            return if (comptime idx < 0) len - u else u;
-        },
-        else => @compileError("Index must be an integer type parameter."),
-    }
-}
-
 inline fn reduceInit(comptime op: ReduceOp, comptime T: type) T {
-
     const info = @typeInfo(T);
 
     return switch (op) {
         .Add => 0, // implicit cast
         .Mul => 1, // implicit cast
         .Min => if (comptime info == .Int)
-            math.maxInt(T) else math.floatMax(T),
+            math.maxInt(T)
+        else
+            math.floatMax(T),
         .Max => if (comptime info == .Int)
-            math.minInt(T) else -math.floatMax(T),
+            math.minInt(T)
+        else
+            -math.floatMax(T),
         else => @compileError("reduceInit: unsupported op"),
     };
 }
@@ -251,18 +271,18 @@ fn simdReduce(
     comptime T: type,
     comptime ReduceType: anytype,
     comptime BinaryFunc: anytype,
-    items: []const T, 
+    items: []const T,
     initial: T,
 ) T {
     // TODO: Check generated assembly on <= loop code gen.
-    
+
     var rdx = initial;
 
     // reduce in size N chunks...
-    var i: usize = 0;    
+    var i: usize = 0;
     if (comptime std.simd.suggestVectorLength(T)) |N| {
         while ((i + N) <= items.len) : (i += N) {
-            const vec: @Vector(N, T) = items[i..i + N][0..N].*; // needs compile time length
+            const vec: @Vector(N, T) = items[i .. i + N][0..N].*; // needs compile time length
             rdx = @call(.always_inline, BinaryFunc, .{ rdx, @reduce(ReduceType, vec) });
         }
     }
@@ -288,6 +308,10 @@ inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x) {
     return x * y;
 }
 
+inline fn absGeneric(x: anytype) @TypeOf(x) {
+    return @abs(x);
+}
+
 //////////////////////////////////
 // Immutable Testing Block ///////
 
@@ -302,20 +326,19 @@ test "Immutable Find Functions" {
 }
 
 test "Immutable at Function" {
-
     const x = Fluent.init("Hello, World!");
     { // Normal indexing...
-        const a = x.get(1);
-        const b = x.get(2);
-        const c = x.get(3);
+        const a = x.at(1);
+        const b = x.at(2);
+        const c = x.at(3);
         try std.testing.expectEqual('e', a);
         try std.testing.expectEqual('l', b);
         try std.testing.expectEqual('l', c);
     }
     { // Pythonic indexing...
-        const a = x.get(-1);
-        const b = x.get(-2);
-        const c = x.get(-3);
+        const a = x.at(-1);
+        const b = x.at(-2);
+        const c = x.at(-3);
         try std.testing.expectEqual('!', a);
         try std.testing.expectEqual('d', b);
         try std.testing.expectEqual('l', c);
@@ -323,7 +346,6 @@ test "Immutable at Function" {
 }
 
 test "Immutable Iterators" {
-
     const x = Fluent.init("this is a test");
     { // split iterators
         var itr = x.split(.scalar, ' ');
@@ -340,45 +362,42 @@ test "Immutable Iterators" {
 }
 
 test "Immutable Reductions" {
-
     const x = Fluent.init(try std.testing.allocator.alloc(i32, 10000));
-        defer std.testing.allocator.free(x.items);
+    defer std.testing.allocator.free(x.items);
     {
         const result = x.fill(2).sum();
         try std.testing.expectEqual(result, 20000);
-    }    
+    }
     {
         const result = x.fill(1).product();
         try std.testing.expectEqual(result, 1);
-    }    
+    }
 
     {
-        x.items[4918] =  999;
+        x.items[4918] = 999;
         const result = x.max();
         try std.testing.expectEqual(result, 999);
-    }    
+    }
     {
         x.items[9176] = -999;
         const result = x.min();
         try std.testing.expectEqual(result, -999);
-    }    
+    }
 }
 
 //////////////////////////////////
 // Mutable Testing Block ///////
 
 test "Mutable Map Chaining" {
-
     const string: []const u8 = "A B C D E F G";
 
     var buffer: [32]u8 = undefined;
 
     const idx = Fluent.init(buffer[0..string.len])
-            .copy(string)
-            .map(std.ascii.toLower)
-            .sort(.asc)
-            .find(.scalar, 'a') orelse unreachable;
+        .copy(string)
+        .map(std.ascii.toLower)
+        .sort(.asc)
+        .find(.scalar, 'a') orelse unreachable;
 
     try std.testing.expect(std.mem.eql(u8, buffer[idx..string.len], "abcdefg"));
 }
-
