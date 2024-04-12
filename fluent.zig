@@ -264,10 +264,7 @@ test "Mutable Map Chaining" {
     const x = Fluent.init(try std.testing.allocator.dupe(u8, "A B C D E F G"));
         defer std.testing.allocator.free(x.items);
 
-    const toUnderscore = 
-        struct { fn call(c: u8) u8 { return if (c == ' ') '_' else c; } }.call;
+    const idx = x.map(std.ascii.toLower).sort(.desc).find(.scalar, ' ') orelse unreachable;
 
-    _ = x.map(std.ascii.toLower).map(toUnderscore);
-
-    try std.testing.expect(x.equal("a_b_c_d_e_f_g"));
+    try std.testing.expect(std.mem.eql(u8, x.items[idx..], "abcdefg"));
 }
