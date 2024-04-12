@@ -168,6 +168,11 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
+        pub fn copy(self: Self, items: []const Self.DataType) Self {
+            @memcpy(self.items, items);
+            return self;
+        }
+
         // TODO: future idea...
 
         // For mapping functions like "abs", only certain types make
@@ -366,11 +371,16 @@ test "Immutable Reductions" {
 
 test "Mutable Map Chaining" {
 
-    const x = Fluent.init(try std.testing.allocator.dupe(u8, "A B C D E F G"));
-        defer std.testing.allocator.free(x.items);
+    const string: []const u8 = "A B C D E F G";
 
-    const idx = x.map(std.ascii.toLower).sort(.asc).find(.scalar, 'a') orelse unreachable;
+    var buffer: [string.len]u8 = undefined;
 
-    try std.testing.expect(std.mem.eql(u8, x.items[idx..], "abcdefg"));
+    const idx = Fluent.init(buffer[0..])
+            .copy(string)
+            .map(std.ascii.toLower)
+            .sort(.asc)
+            .find(.scalar, 'a') orelse unreachable;
+
+    try std.testing.expect(std.mem.eql(u8, buffer[idx..], "abcdefg"));
 }
 
