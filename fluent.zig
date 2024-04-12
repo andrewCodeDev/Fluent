@@ -373,14 +373,14 @@ test "Mutable Map Chaining" {
 
     const string: []const u8 = "A B C D E F G";
 
-    var buffer: [string.len]u8 = undefined;
+    var buffer: [32]u8 = undefined;
 
-    const idx = Fluent.init(buffer[0..])
+    const idx = Fluent.init(buffer[0..string.len])
             .copy(string)
             .map(std.ascii.toLower)
             .sort(.asc)
             .find(.scalar, 'a') orelse unreachable;
 
-    try std.testing.expect(std.mem.eql(u8, buffer[idx..], "abcdefg"));
+    try std.testing.expect(std.mem.eql(u8, buffer[idx..string.len], "abcdefg"));
 }
 
