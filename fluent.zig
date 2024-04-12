@@ -67,28 +67,8 @@ fn ImmutableBackend(comptime Self: type) type {
             return findFrom(self, mode, 0, needle);
         }
 
-        // TODO: make conversion function for integers that handles all this?
-        pub fn at(self: Self, int: anytype) Self.DataType {
-            switch (@typeInfo(@TypeOf(int))) {
-                .Int => |i| {
-                    if (comptime i.signedness == .unsigned) {
-                        return self.items[int];
-                    } else {
-                        const u: usize = @abs(int);
-                        return self.items[if (int < 0) self.items.len - u else u];
-                    }
-                },
-                .ComptimeInt => {
-                    if (comptime int > 0) {
-                        return self.items[int];
-                    } else {
-                        const u: usize = comptime @abs(int);
-                        return self.items[if (int < 0) self.items.len - u else u];
-                    }
-                    return self.items[if (comptime int < 0) @as(isize, @intCast(self.items.len)) + int else int];
-                },
-                else => @compileError("At requires integer type parameter."),
-            }
+        pub fn get(self: Self, idx: anytype) Self.DataType {
+            return self.items[wrapIndex(self.items.len, idx)];
         }
 
         // NOTE: 
@@ -234,6 +214,28 @@ fn DeepChild(comptime T: type) type {
     };
 }
 
+inline fn wrapIndex(len: usize, idx: anytype) usize {
+    switch (@typeInfo(@TypeOf(idx))) {
+        .Int => |i| {
+            if (comptime i.signedness == .unsigned) {
+                return idx;
+            } else {
+                const u: usize = @abs(idx);
+                return if (idx < 0) len - u else u;
+            }
+        },
+        .ComptimeInt => {
+            if (comptime idx > 0) {
+                return idx;
+            } else {
+                const u: usize = comptime @abs(idx);
+                return if (comptime idx < 0) len - u else u;
+            }
+        },
+        else => @compileError("Index must be an integer type parameter."),
+    }
+}
+
 inline fn reduceInit(comptime op: ReduceOp, comptime T: type) T {
 
     const info = @typeInfo(T);
@@ -307,17 +309,17 @@ test "Immutable at Function" {
 
     const x = Fluent.init("Hello, World!");
     { // Normal indexing...
-        const a = x.at(1);
-        const b = x.at(2);
-        const c = x.at(3);
+        const a = x.get(1);
+        const b = x.get(2);
+        const c = x.get(3);
         try std.testing.expectEqual('e', a);
         try std.testing.expectEqual('l', b);
         try std.testing.expectEqual('l', c);
     }
     { // Pythonic indexing...
-        const a = x.at(-1);
-        const b = x.at(-2);
-        const c = x.at(-3);
+        const a = x.get(-1);
+        const b = x.get(-2);
+        const c = x.get(-3);
         try std.testing.expectEqual('!', a);
         try std.testing.expectEqual('d', b);
         try std.testing.expectEqual('l', c);
