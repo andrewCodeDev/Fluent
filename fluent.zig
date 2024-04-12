@@ -199,6 +199,21 @@ fn MutableBackend(comptime Self: type) type {
             };
         }
 
+        // this one needs a lot more though, it's just to see if this is what you had in
+        // mine when you where talking about mutable operations. The only problem here is
+        // that the filter function would be better if it was able to modify the .len of the
+        // items, but I'm not sure what would be the implication in terms of usability
+        pub fn filter(self: Self, f: fn (Self.DataType) bool, predicate: bool) Self {
+            var write_index: usize = 0;
+            for (0..self.items.len) |i| {
+                if (f(self.items[i]) == predicate) {
+                    self.items[write_index] = self.items[i];
+                    write_index += 1;
+                }
+            }
+            return (self);
+        }
+
         // Another option is to compose backends for math-ish operations
         // that don't make sense across types and only expose them if
         // they make sense for the Self.DataType.
@@ -400,4 +415,24 @@ test "Mutable Map Chaining" {
         .find(.scalar, 'a') orelse unreachable;
 
     try std.testing.expect(std.mem.eql(u8, buffer[idx..string.len], "abcdefg"));
+}
+
+test "Mutable filter" {
+    const string: []const u8 = "A B C D E F G";
+    var buffer: [32]u8 = undefined;
+    const len = Fluent.init(buffer[0..string.len])
+        .copy(string)
+        .filter(std.ascii.isWhitespace, false)
+        .find(.scalar, 'G') orelse unreachable;
+    try std.testing.expectEqualStrings("ABCDEFG", buffer[0 .. len + 1]);
+}
+
+test "Mutable filter 2" {
+    const string: []const u8 = "A1 B2 C3 D4 E5 F6 G7";
+    var buffer: [32]u8 = undefined;
+    const len = Fluent.init(buffer[0..string.len])
+        .copy(string)
+        .filter(std.ascii.isDigit, true)
+        .find(.scalar, '7') orelse unreachable;
+    try std.testing.expectEqualStrings("1234567", buffer[0 .. len + 1]);
 }
