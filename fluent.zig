@@ -225,12 +225,8 @@ inline fn wrapIndex(len: usize, idx: anytype) usize {
             }
         },
         .ComptimeInt => {
-            if (comptime idx >= 0) {
-                return idx;
-            } else {
-                const u: usize = comptime @abs(idx);
-                return if (comptime idx < 0) len - u else u;
-            }
+            const u: usize = comptime @abs(idx);
+            return if (comptime idx < 0) len - u else u;
         },
         else => @compileError("Index must be an integer type parameter."),
     }
