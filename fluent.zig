@@ -1,6 +1,8 @@
 const std = @import("std");
 const Child = std.meta.Child;
 const Order = std.math.Order;
+const ReduceOp = std.builtin.ReduceOp;
+const math = std.math;
 
 //////////////////////////////////
 // Public Access Point ///////////
@@ -101,6 +103,23 @@ fn ImmutableBackend(comptime Self: type) type {
             return order(self, items) == .eq;
         }
 
+        pub fn sum(self: Self) Self.DataType {
+            if (self.items.len == 0) return 0;
+            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Add, addGeneric, self.items, reduceInit(ReduceOp.Add, Self.DataType) });
+        }
+        pub fn product(self: Self) Self.DataType {
+            if (self.items.len == 0) return 0;
+            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Mul, mulGeneric, self.items, reduceInit(ReduceOp.Mul, Self.DataType) });
+        }
+        // currently returns inf if items is empty
+        pub fn min(self: Self) Self.DataType {
+            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Min, minGeneric, self.items, reduceInit(ReduceOp.Min, Self.DataType) });
+        }
+        // currently returns -inf if items is empty
+        pub fn max(self: Self) Self.DataType {
+            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, maxGeneric, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
+        }
+
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
@@ -141,6 +160,11 @@ fn MutableBackend(comptime Self: type) type {
             const SF = SortFunction(Self.DataType);
             const func = if (mode == .asc) SF.lessThan else SF.greaterThan;
             std.sort.block(Self.DataType, self.items, void{}, func);
+            return self;
+        }
+
+        pub fn fill(self: Self, scalar: Self.DataType) Self {
+            @memset(self.items, scalar);
             return self;
         }
 
@@ -205,6 +229,62 @@ fn DeepChild(comptime T: type) type {
     };
 }
 
+inline fn reduceInit(comptime op: ReduceOp, comptime T: type) T {
+
+    const info = @typeInfo(T);
+
+    return switch (op) {
+        .Add => 0, // implicit cast
+        .Mul => 1, // implicit cast
+        .Min => if (comptime info == .Int)
+            math.maxInt(T) else math.floatMax(T),
+        .Max => if (comptime info == .Int)
+            math.minInt(T) else -math.floatMax(T),
+        else => @compileError("reduceInit: unsupported op"),
+    };
+}
+
+fn simdReduce(
+    comptime T: type,
+    comptime ReduceType: anytype,
+    comptime BinaryFunc: anytype,
+    items: []const T, 
+    initial: T,
+) T {
+    // TODO: Check generated assembly on <= loop code gen.
+    
+    var rdx = initial;
+
+    // reduce in size N chunks...
+    var i: usize = 0;    
+    if (comptime std.simd.suggestVectorLength(T)) |N| {
+        while ((i + N) <= items.len) : (i += N) {
+            const vec: @Vector(N, T) = items[i..i + N][0..N].*; // needs compile time length
+            rdx = @call(.always_inline, BinaryFunc, .{ rdx, @reduce(ReduceType, vec) });
+        }
+    }
+
+    // reduce remainder...
+    while (i < items.len) : (i += 1) {
+        rdx = @call(.always_inline, BinaryFunc, .{ rdx, items[i] });
+    }
+    return rdx;
+}
+
+// these work for @Vector as well as scalar types
+inline fn maxGeneric(x: anytype, y: anytype) @TypeOf(x) {
+    return @max(x, y);
+}
+inline fn minGeneric(x: anytype, y: anytype) @TypeOf(x) {
+    return @min(x, y);
+}
+inline fn addGeneric(x: anytype, y: anytype) @TypeOf(x) {
+    return x + y;
+}
+inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x) {
+    return x * y;
+}
+
 //////////////////////////////////
 // Immutable Testing Block ///////
 
@@ -256,6 +336,31 @@ test "Immutable Iterators" {
     }
 }
 
+test "Immutable Reductions" {
+
+    const x = Fluent.init(try std.testing.allocator.alloc(i32, 10000));
+        defer std.testing.allocator.free(x.items);
+    {
+        const result = x.fill(2).sum();
+        try std.testing.expectEqual(result, 20000);
+    }    
+    {
+        const result = x.fill(1).product();
+        try std.testing.expectEqual(result, 1);
+    }    
+
+    {
+        x.items[4918] =  999;
+        const result = x.max();
+        try std.testing.expectEqual(result, 999);
+    }    
+    {
+        x.items[9176] = -999;
+        const result = x.min();
+        try std.testing.expectEqual(result, -999);
+    }    
+}
+
 //////////////////////////////////
 // Mutable Testing Block ///////
 
@@ -268,3 +373,4 @@ test "Mutable Map Chaining" {
 
     try std.testing.expect(std.mem.eql(u8, x.items[idx..], "abcdefg"));
 }
+
