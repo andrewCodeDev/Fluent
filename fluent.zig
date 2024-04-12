@@ -225,7 +225,7 @@ inline fn wrapIndex(len: usize, idx: anytype) usize {
             }
         },
         .ComptimeInt => {
-            if (comptime idx > 0) {
+            if (comptime idx >= 0) {
                 return idx;
             } else {
                 const u: usize = comptime @abs(idx);
