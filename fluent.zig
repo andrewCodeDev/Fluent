@@ -138,7 +138,7 @@ fn MutableBackend(comptime Self: type) type {
         // calls std.sort.block
         pub fn sort(self: Self, comptime mode: enum{ asc, desc }) Self {
             const SF = SortFunction(Self.DataType);
-            const func = if (mode == .asc) SF.lessThen else SF.greaterThen;
+            const func = if (mode == .asc) SF.lessThan else SF.greaterThan;
             std.sort.block(Self.DataType, self.items, void{}, func);
             return self;
         }
@@ -147,10 +147,10 @@ fn MutableBackend(comptime Self: type) type {
 
 fn SortFunction(comptime T: type) type {
     return struct {
-        fn lessThen(_: void, x: T, y: T) bool {
+        fn lessThan(_: void, x: T, y: T) bool {
             return x < y;
         }
-        fn greaterThen(_: void, x: T, y: T) bool {
+        fn greaterThan(_: void, x: T, y: T) bool {
             return x > y;
         }
     };
