@@ -257,7 +257,7 @@ test "Immutable Iterators" {
 }
 
 //////////////////////////////////
-// Immutable Testing Block ///////
+// Mutable Testing Block ///////
 
 test "Mutable Map Chaining" {
 
