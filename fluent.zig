@@ -3,6 +3,8 @@ const Child = std.meta.Child;
 const Order = std.math.Order;
 const ReduceOp = std.builtin.ReduceOp;
 const math = std.math;
+const mem = std.mem;
+const testing_allocator = std.testing.allocator;
 
 //////////////////////////////////
 // Public Access Point ///////////
@@ -54,6 +56,10 @@ fn ImmutableBackend(comptime Self: type) type {
                 .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
                 .sequence => std.mem.indexOfPos(Self.DataType, self.items, start_index, needle),
             };
+        }
+
+        pub fn count(self: Self, needle: []const Self.DataType) usize {
+            return std.mem.count(Self.DataType, self.items, needle);
         }
 
         pub fn find(
@@ -180,38 +186,59 @@ fn MutableBackend(comptime Self: type) type {
         // functions for those and make them no-ops if they don't
         // apply.
         pub fn abs(self: Self) Self {
-            return switch (@typeInfo(@TypeOf(self.DataType))) {
-                .Int => |i| {
-                    if (i.signedness == .unsigned) return (self);
-                    switch (i.bits) {
-                        8 => {
-                            return (self);
-                        },
-                        16, 32, 64, 128 => {
-                            // simd stuff
-                            @panic("WIP : Not implemented yet\n");
-                        },
-                        else => {
-                            for (self.items) |*x| x.* = @abs(x.*);
-                        },
-                    }
+            if (isSigned(Self.DataType) == false) return (self);
+            return .{ .items = @call(.always_inline, simdAbs, .{ Self.DataType, absGeneric, self.items }) };
+        }
+
+        pub fn trim(self: Self, s: Self.DataType, opt: enum { left, right, both }) Self {
+            return switch (opt) {
+                .left => {
+                    return .{
+                        // experimental simd implementation not sure it's working perfectly
+                        .items = self.items[(@call(.always_inline, simdSpan, .{ Self.DataType, s, self.items }))..self.items.len],
+                    };
+                },
+                .right => {
+                    return .{
+                        // I'm not sure how to simd this like one thing that could work is to do it in reverse but
+                        // idk I'm not sure about that too I feel kind of dumb lol
+                        .items = self.items[0 .. std.mem.lastIndexOfScalar(Self.DataType, self.items, s) orelse self.items.len],
+                    };
+                },
+                .both => {
+                    // There is most certainly a better way of doing it this is full tryhard but I can't make it work otherwhise
+                    // I'm not even sure this is correct in all cases, the +1 seems flaky af but at least thats
+                    // a starting point.
+                    const slice = &[_]Self.DataType{s};
+                    const start = std.mem.indexOfNone(Self.DataType, self.items, slice) orelse 0;
+                    const end = blk: {
+                        var i: usize = self.items.len - 1;
+                        while (i >= start) : (i -= 1) {
+                            if (self.at(i) == s) continue else break :blk i + 1;
+                        }
+                        break :blk self.items.len + 1;
+                    };
+                    return .{
+                        .items = self.items[start..end],
+                    };
                 },
             };
         }
 
-        // this one needs a lot more though, it's just to see if this is what you had in
-        // mine when you where talking about mutable operations. The only problem here is
-        // that the filter function would be better if it was able to modify the .len of the
-        // items, but I'm not sure what would be the implication in terms of usability
-        pub fn filter(self: Self, f: fn (Self.DataType) bool, predicate: bool) Self {
-            var write_index: usize = 0;
-            for (0..self.items.len) |i| {
-                if (f(self.items[i]) == predicate) {
-                    self.items[write_index] = self.items[i];
-                    write_index += 1;
-                }
+        pub fn rotate(self: Self, opt: enum { left, right }, amount: usize) Self {
+            if (amount == self.items.len or amount == 0) return self;
+            switch (opt) {
+                .left => {
+                    std.mem.rotate(Self.DataType, self.items, amount);
+                    return .{ .items = self.items };
+                },
+                .right => {
+                    const len = self.items.len;
+                    const rotate_left_amount = @mod(len - amount, len);
+                    std.mem.rotate(Self.DataType, self.items, rotate_left_amount);
+                    return .{ .items = self.items };
+                },
             }
-            return (self);
         }
 
         // Another option is to compose backends for math-ish operations
@@ -241,6 +268,20 @@ fn isConst(comptime T: type) bool {
     switch (@typeInfo(T)) {
         .Pointer => |ptr| return ptr.is_const,
         else => @compileError("Type must coercible to a slice."),
+    }
+}
+
+fn isSigned(comptime T: type) bool {
+    switch (@typeInfo(T)) {
+        .Int => |i| {
+            return if (i.signedness == .unsigned)
+                (false)
+            else
+                (true);
+        },
+        else => {
+            return (true);
+        },
     }
 }
 
@@ -309,6 +350,75 @@ fn simdReduce(
     return rdx;
 }
 
+fn simdAbs(
+    comptime T: type,
+    comptime UnaryFunc: anytype,
+    items: []T,
+) []T {
+    var i: usize = 0;
+    if (comptime std.simd.suggestVectorLength(T)) |N| {
+        while ((i + N) <= items.len) : (i += N) {
+            const vec: @Vector(N, T) = items[i .. i + N][0..N].*;
+            items[i .. i + N][0..N].* = @call(.always_inline, UnaryFunc, .{vec});
+        }
+    }
+
+    while (i < items.len) : (i += 1) {
+        items[i] = @call(.always_inline, UnaryFunc, .{items[i]});
+    }
+    return items[0..];
+}
+
+// This is experimental SIMD stuff, I'm not sure I've done it right
+// As I've never writen SIMD stuff in Zig but you let me know if there
+// is something that doesn't work as expected, or if I shoudld just stick
+// with the functions from std.mem
+fn simdCspan(comptime T: type, v: T, items: []T) ?usize {
+    var i: usize = 0;
+
+    if (comptime std.simd.suggestVectorLength(T)) |N| {
+        const VEC = @Vector(N, T);
+        const mask: VEC = @splat(v);
+
+        while ((i + N) <= items.len) : (i += N) {
+            const block: *const VEC = @ptrCast(@alignCast(items[i..][0..N]));
+            const result = block.* == mask;
+            if (@reduce(.Or, result)) {
+                return (i + @as(usize, (@intCast(std.simd.firstTrue(result) orelse 0))));
+            }
+        }
+    }
+    while (i < items.len) : (i += 1) {
+        if (items[i] == v) return (i);
+    }
+    return (i);
+}
+
+fn simdSpan(
+    comptime T: type,
+    v: T,
+    items: []T,
+) usize {
+    var i: usize = 0;
+
+    if (comptime std.simd.suggestVectorLength(T)) |N| {
+        const VEC = @Vector(N, T);
+        const mask: VEC = @splat(v);
+
+        while ((i + N) <= items.len) : (i += N) {
+            const block: *const VEC = @ptrCast(@alignCast(items[i..][0..N]));
+            const result = block.* == mask;
+            if (@reduce(.And, result)) {
+                return (i + @as(usize, (@intCast(std.simd.firstTrue(result) orelse 0))));
+            }
+        }
+    }
+    while (i < items.len) : (i += 1) {
+        if (items[i] != v) return (i);
+    }
+    return (i);
+}
+
 // these work for @Vector as well as scalar types
 inline fn maxGeneric(x: anytype, y: anytype) @TypeOf(x) {
     return @max(x, y);
@@ -324,7 +434,7 @@ inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x) {
 }
 
 inline fn absGeneric(x: anytype) @TypeOf(x) {
-    return @abs(x);
+    return @intCast(@abs(x));
 }
 
 //////////////////////////////////
@@ -417,22 +527,67 @@ test "Mutable Map Chaining" {
     try std.testing.expect(std.mem.eql(u8, buffer[idx..string.len], "abcdefg"));
 }
 
-test "Mutable filter" {
-    const string: []const u8 = "A B C D E F G";
-    var buffer: [32]u8 = undefined;
-    const len = Fluent.init(buffer[0..string.len])
-        .copy(string)
-        .filter(std.ascii.isWhitespace, false)
-        .find(.scalar, 'G') orelse unreachable;
-    try std.testing.expectEqualStrings("ABCDEFG", buffer[0 .. len + 1]);
+test "Mutable Abs Chaining : basic" {
+    var array: []i32 = @constCast(&[_]i32{ -1, -2, -3 });
+    const expected = &[_]i32{ 1, 2, 3 };
+    const result = Fluent.init(array[0..array.len]).abs();
+    try std.testing.expect(std.mem.eql(i32, expected[0..array.len], result.items[0..array.len]));
 }
 
-test "Mutable filter 2" {
-    const string: []const u8 = "A1 B2 C3 D4 E5 F6 G7";
-    var buffer: [32]u8 = undefined;
-    const len = Fluent.init(buffer[0..string.len])
-        .copy(string)
-        .filter(std.ascii.isDigit, true)
-        .find(.scalar, '7') orelse unreachable;
-    try std.testing.expectEqualStrings("1234567", buffer[0 .. len + 1]);
+test "Mutable Trim Chaining : basic" {
+    var array: []i32 = @constCast(&[_]i32{ 1, 2, 3 });
+    const expected = &[_]i32{ 2, 3 };
+    const result = Fluent.init(array[0..array.len]).trim(1, .left);
+    try std.testing.expect(std.mem.eql(i32, expected[0..2], result.items[0..2]));
+}
+
+test "Mutable Trim Chaining : left" {
+    var string: []u8 = try testing_allocator.dupe(u8, "A B C D E F G");
+    defer testing_allocator.free(string);
+
+    const result = Fluent.init(string[0..string.len])
+        .map(std.ascii.toLower)
+        .sort(.asc)
+        .trim(' ', .left);
+    try std.testing.expect(std.mem.eql(u8, result.items[0..7], "abcdefg"));
+}
+
+test "Mutable Trim Chaining : right" {
+    var string: []u8 = try testing_allocator.dupe(u8, "A B C D E F G          ");
+    defer testing_allocator.free(string);
+
+    const result = Fluent.init(string[0..string.len])
+        .map(std.ascii.toLower)
+        .trim(' ', .right);
+    try std.testing.expect(std.mem.eql(u8, result.items[0..13], "a b c d e f g"));
+}
+
+test "Mutable Trim Chaining : both" {
+    var string: []u8 = try testing_allocator.dupe(u8, "           A B C D E F G          ");
+    defer testing_allocator.free(string);
+
+    const result = Fluent.init(string[0..string.len])
+        .map(std.ascii.toLower)
+        .trim(' ', .both);
+    try std.testing.expect(std.mem.eql(u8, result.items[0..13], "a b c d e f g"));
+}
+
+test "Mutate Rotate chaining : left" {
+    var string: []u8 = try testing_allocator.dupe(u8, "ABCDEFG");
+    defer testing_allocator.free(string);
+
+    const result = Fluent.init(string[0..string.len])
+        .map(std.ascii.toLower)
+        .rotate(.left, 1);
+    try std.testing.expect(std.mem.eql(u8, result.items[0..7], "bcdefga"));
+}
+
+test "Mutate Rotate chaining : right" {
+    var string: []u8 = try testing_allocator.dupe(u8, "ABCDEFG");
+    defer testing_allocator.free(string);
+
+    const result = Fluent.init(string[0..string.len])
+        .map(std.ascii.toLower)
+        .rotate(.right, 1);
+    try std.testing.expect(std.mem.eql(u8, result.items[0..7], "gabcdef"));
 }
