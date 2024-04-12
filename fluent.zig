@@ -58,9 +58,10 @@ fn ImmutableBackend(comptime Self: type) type {
             };
         }
 
-        pub fn count(self: Self, needle: []const Self.DataType) usize {
-            return std.mem.count(Self.DataType, self.items, needle);
-        }
+        // Not sure why I did that at some point
+        // pub fn count(self: Self, needle: []const Self.DataType) usize {
+        //     return std.mem.count(Self.DataType, self.items, needle);
+        // }
 
         pub fn find(
             self: Self,
@@ -433,8 +434,10 @@ inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x) {
     return x * y;
 }
 
+// These feels wrong but try to remove it and you'll get weird error message
+// I'm not sure how to fix it tbh sorry for all the technical debt ahah
 inline fn absGeneric(x: anytype) @TypeOf(x) {
-    return @intCast(@abs(x));
+    return @bitCast(@abs(x));
 }
 
 //////////////////////////////////
@@ -532,6 +535,13 @@ test "Mutable Abs Chaining : basic" {
     const expected = &[_]i32{ 1, 2, 3 };
     const result = Fluent.init(array[0..array.len]).abs();
     try std.testing.expect(std.mem.eql(i32, expected[0..array.len], result.items[0..array.len]));
+}
+
+test "Mutable Abs Chaining : float" {
+    var array: []f32 = @constCast(&[_]f32{ -1, -2, -3 });
+    const expected = &[_]f32{ 1, 2, 3 };
+    const result = Fluent.init(array[0..array.len]).abs();
+    try std.testing.expect(std.mem.eql(f32, expected[0..array.len], result.items[0..array.len]));
 }
 
 test "Mutable Trim Chaining : basic" {
