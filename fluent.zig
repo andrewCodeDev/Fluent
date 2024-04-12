@@ -132,6 +132,7 @@ fn ImmutableBackend(comptime Self: type) type {
 fn MutableBackend(comptime Self: type) type {
     return struct {
 
+
         // includes operations like reduce, find, and iterators
         pub usingnamespace ImmutableBackend(Self);
 
@@ -140,6 +141,27 @@ fn MutableBackend(comptime Self: type) type {
             const SF = SortFunction(Self.DataType);
             const func = if (mode == .asc) SF.lessThan else SF.greaterThan;
             std.sort.block(Self.DataType, self.items, void{}, func);
+            return self;
+        }
+
+        // TODO: future idea...
+
+        // For mapping functions like "abs", only certain types make
+        // sense there. We could prohbit those or make them no-ops
+        // for certain types of scalar values... u8, for instance,
+        // would be a no-op. Other types could be vectorized with
+        // SIMD and use the builtin @abs function. For things that
+        // can be vectorized, we should probably provide member
+        // functions for those and make them no-ops if they don't
+        // apply.
+
+        // Another option is to compose backends for math-ish operations
+        // that don't make sense across types and only expose them if
+        // they make sense for the Self.DataType.
+
+        // Meanwhile, we can always have a `map` fallback.
+        pub fn map(self: Self, f: fn (Self.DataType) Self.DataType) Self {
+            for (self.items) |*x| x.* = f(x.*);
             return self;
         }
     };
@@ -232,4 +254,20 @@ test "Immutable Iterators" {
         std.debug.assert(s3.equal("test"));
         std.debug.assert(itr.next() == null);
     }
+}
+
+//////////////////////////////////
+// Immutable Testing Block ///////
+
+test "Mutable Map Chaining" {
+
+    const x = Fluent.init(try std.testing.allocator.dupe(u8, "A B C D E F G"));
+        defer std.testing.allocator.free(x.items);
+
+    const toUnderscore = 
+        struct { fn call(c: u8) u8 { return if (c == ' ') '_' else c; } }.call;
+
+    _ = x.map(std.ascii.toLower).map(toUnderscore);
+
+    try std.testing.expect(x.equal("a_b_c_d_e_f_g"));
 }
