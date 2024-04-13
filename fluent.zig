@@ -244,6 +244,25 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
+        pub fn concat(self: Self, index: usize, items: []const Self.DataType) Self {
+            std.debug.assert(index < self.items.len);
+            std.debug.assert(self.items.len - (self.items.len - index) <= items.len);
+            @memcpy(self.items[index..], items[0..]);
+            return self;
+        }
+
+        pub fn join(self: Self, items1: []const Self.DataType, maybe_sep: ?Self.DataType, items2: []const Self.DataType) Self {
+            std.debug.assert(self.items.len <= (items1.len + items2.len + if (maybe_sep != null) 1 else 0));
+            @memcpy(self.items[0..items1.len], items1[0..]);
+            if (maybe_sep) |sep| {
+                self.items[items1.len] = sep;
+                @memcpy(self.items[items1.len + 1 .. items2.len], items2[0..]);
+            } else {
+                @memcpy(self.items[items1.len..items2.len], items2[0..]);
+            }
+            return self;
+        }
+
         pub fn rotate(self: Self, amount: anytype) Self {
             const len = self.items.len;
 
