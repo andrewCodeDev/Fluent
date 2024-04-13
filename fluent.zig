@@ -168,9 +168,8 @@ fn ImmutableBackend(comptime Self: type) type {
                     for (self.items) |it| {
                         if (it == needle) result += 1;
                     }
-                    return result;
                 },
-                .sequence => return std.mem.count(Self.DataType, self.items, needle),
+                .sequence => result = std.mem.count(Self.DataType, self.items, needle),
                 .any => {
                     // temporary doing O(N^2) before implementing something smarter
                     for (self.items) |it| {
@@ -180,6 +179,7 @@ fn ImmutableBackend(comptime Self: type) type {
                     }
                 },
             }
+            return (result);
         }
 
         ///////////////////////////////////////////////////
@@ -525,6 +525,48 @@ test "Immutable Reductions" {
         x.items[9176] = -999;
         const result = x.min();
         try std.testing.expectEqual(result, -999);
+    }
+}
+
+test "Immutable count" {
+    const number = &[_]i32{ 1, 2, 3, 1, 2, 3, 1, 2, 3 };
+    const num_scalar = 1;
+    const num_sequence = &[_]i32{ 1, 2, 3 };
+    const num_any = &[_]i32{ 3, 1 };
+    const string = "This is a string";
+    const str_scalar = 's';
+    const str_sequence = "is";
+    const str_any = "sti";
+
+    {
+        const result = Fluent.init(number[0..])
+            .count(.scalar, num_scalar);
+        try std.testing.expect(result == 3);
+    }
+    {
+        const result = Fluent.init(number[0..])
+            .count(.sequence, num_sequence);
+        try std.testing.expect(result == 3);
+    }
+    {
+        const result = Fluent.init(number[0..])
+            .count(.any, num_any);
+        try std.testing.expect(result == 6);
+    }
+    {
+        const result = Fluent.init(string[0..])
+            .count(.scalar, str_scalar);
+        try std.testing.expect(result == 3);
+    }
+    {
+        const result = Fluent.init(string[0..])
+            .count(.sequence, str_sequence);
+        try std.testing.expect(result == 2);
+    }
+    {
+        const result = Fluent.init(string[0..])
+            .count(.any, str_any);
+        try std.testing.expect(result == 7);
     }
 }
 
