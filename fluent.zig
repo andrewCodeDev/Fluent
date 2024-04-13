@@ -377,6 +377,33 @@ fn MutableBackend(comptime Self: type) type {
             return (self);
         }
 
+        pub fn trim(self: Self, predicate: fn (Self.DataType) bool, opt: enum { left, right, both }) Self {
+            if (self.items.len <= 1) return self;
+            var start: usize = 0;
+            var end: usize = self.items.len;
+            switch (opt) {
+                .left => {
+                    while (start < end) : (start += 1) {
+                        if (!predicate(self.items[start])) break;
+                    }
+                },
+                .right => {
+                    while (end > start) : (end -= 1) {
+                        if (!predicate(self.items[end - 1])) break;
+                    }
+                },
+                .both => {
+                    while (start < end) : (start += 1) {
+                        if (!predicate(self.items[start])) break;
+                    }
+                    while (end > start) : (end -= 1) {
+                        if (!predicate(self.items[end - 1])) break;
+                    }
+                },
+            }
+            return self.slice(start, end);
+        }
+
         pub fn rotate(self: Self, amount: anytype) Self {
             const len = self.items.len;
 
@@ -563,11 +590,13 @@ fn DeepChild(comptime T: type) type {
 }
 
 inline fn wrapRange(len: usize, start: usize, end: usize) struct { start: usize, end: usize } {
-    const wraped_start: usize = if (start > len) len else start;
-    const wraped_end: usize = if (end > len) len else end;
+    if (len == 0) return .{ .start = 0, .end = 0 };
+    const wraped_start: usize = if (start > len) 0 else start;
+    const wraped_end: usize = if (end > len) len - 1 else end;
 
     if (wraped_start == wraped_end) return .{ .start = 0, .end = len };
     if (wraped_start > wraped_end) return .{ .start = wraped_end, .end = wraped_start };
+    return .{ .start = wraped_start, .end = wraped_end };
 }
 
 inline fn wrapIndex(len: usize, idx: anytype) usize {
@@ -941,5 +970,29 @@ test "Mutable backend partition" {
             .copy(numbers)
             .partion(isOne, .unstable);
         try std.testing.expect(result.equal(numbers_unstable));
+    }
+}
+
+test "Mutable backend trim" {
+    const untrimed_str = "     This is a string     ";
+
+    var buffer: [32]u8 = undefined;
+    {
+        const result = Fluent.init(buffer[0..untrimed_str.len])
+            .copy(untrimed_str)
+            .trim(std.ascii.isWhitespace, .left);
+        try std.testing.expect(result.equal("This is a string     "));
+    }
+    {
+        const result = Fluent.init(buffer[0..untrimed_str.len])
+            .copy(untrimed_str)
+            .trim(std.ascii.isWhitespace, .right);
+        try std.testing.expect(result.equal("     This is a string"));
+    }
+    {
+        const result = Fluent.init(buffer[0..untrimed_str.len])
+            .copy(untrimed_str)
+            .trim(std.ascii.isWhitespace, .both);
+        try std.testing.expect(result.equal("This is a string"));
     }
 }
