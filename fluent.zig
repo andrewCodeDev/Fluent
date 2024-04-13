@@ -246,8 +246,8 @@ fn MutableBackend(comptime Self: type) type {
 
         pub fn concat(self: Self, index: usize, items: []const Self.DataType) Self {
             std.debug.assert(index < self.items.len);
-            std.debug.assert(self.items.len - (self.items.len - index) <= items.len);
-            @memcpy(self.items[index..], items[0..]);
+            std.debug.assert(index + items.len <= self.items.len);
+            @memcpy(self.items[index..(index + items.len)], items[0..items.len]);
             return self;
         }
 
@@ -262,6 +262,8 @@ fn MutableBackend(comptime Self: type) type {
             }
             return self;
         }
+
+        // pub fn partion(self: Self, item: Self.DataType, opt: enum { stable, unstable }) Self {}
 
         pub fn rotate(self: Self, amount: anytype) Self {
             const len = self.items.len;
@@ -750,5 +752,25 @@ test "String Backend" {
             .capitalize();
 
         try std.testing.expect(x.equal("Abcdefg"));
+    }
+}
+
+test "Mutable Backend concat" {
+    const expected_str = "Hello, World!";
+    const expected_num = &[_]i32{ 1, 2, 3, 4, 5, 6 };
+
+    var str_buffer: [32]u8 = undefined;
+    var num_buffer: [32]i32 = undefined;
+    {
+        const result = Fluent.init(str_buffer[0..expected_str.len])
+            .concat(0, "Hello, ")
+            .concat(7, "World!");
+        try std.testing.expect(result.equal(expected_str));
+    }
+    {
+        const result = Fluent.init(num_buffer[0..expected_num.len])
+            .concat(0, &[_]i32{ 1, 2, 3 })
+            .concat(3, &[_]i32{ 4, 5, 6 });
+        try std.testing.expect(result.equal(expected_num));
     }
 }
