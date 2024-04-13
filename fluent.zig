@@ -484,6 +484,27 @@ fn simdReduce(
     return rdx;
 }
 
+fn simdCspan(comptime T: type, v: T, items: []T) usize {
+    var i: usize = 0;
+
+    if (comptime std.simd.suggestVectorLength(T)) |N| {
+        const VEC = @Vector(N, T);
+        const mask: VEC = @splat(v);
+
+        while ((i + N) <= items.len) : (i += N) {
+            const block: *const VEC = @ptrCast(@alignCast(items[i..][0..N]));
+            const result = block.* == mask;
+            if (@reduce(.Or, result)) {
+                return (i + @as(usize, (@intCast(std.simd.firstTrue(result) orelse N))));
+            }
+        }
+    }
+    while (i < items.len) : (i += 1) {
+        if (items[i] == v) return (i);
+    }
+    return (i);
+}
+
 // these work for @Vector as well as scalar types
 inline fn maxGeneric(x: anytype, y: anytype) @TypeOf(x) {
     return @max(x, y);
