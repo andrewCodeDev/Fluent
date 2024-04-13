@@ -129,6 +129,13 @@ fn ImmutableBackend(comptime Self: type) type {
             };
         }
 
+        pub fn slice(self: Self, start: usize, end: usize) Self {
+            const w = wrapRange(self.items.len, start, end);
+            const w_start = w.start;
+            const w_end = w.end;
+            return .{ .items = self.items[w_start..w_end] };
+        }
+
         // NOTE:
         //  using slices here because this makes it directly
         //  obvious that we're support any kind of slice and
@@ -320,6 +327,12 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
+        pub fn swap(self: Self, idx1: usize, idx2: usize) void {
+            const temp = self.items[wrapIndex(self.items.len, idx1)];
+            self.items[wrapIndex(self.items.len, idx1)] = self.items[wrapIndex(self.items.len, idx2)];
+            self.items[wrapIndex(self.items.len, idx2)] = temp;
+        }
+
         pub fn join(self: Self, items1: []const Self.DataType, maybe_sep: ?Self.DataType, items2: []const Self.DataType) Self {
             if (maybe_sep) |sep| {
                 std.debug.assert(self.items.len <= (items1.len + items2.len + 1));
@@ -334,7 +347,23 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
-        // pub fn partion(self: Self, item: Self.DataType, opt: enum { stable, unstable }) Self {}
+        pub fn partion(self: Self, item: Self.DataType, opt: enum { stable, unstable }) Self {
+            const len = self.items.len;
+            switch (opt) {
+                .stable => {
+                    // insertion sort kind of partionionning
+                    var i: usize = 1;
+                    while (i < len) : (i += 1) {
+                        var j: usize = i;
+                        while (j >= 1 and self.items[j - 1] != item and self.items[j] == item) : (j -= 1) {
+                            self.swap(j - 1, j);
+                        }
+                    }
+                },
+                .unstable => {},
+            }
+            return (self);
+        }
 
         pub fn rotate(self: Self, amount: anytype) Self {
             const len = self.items.len;
@@ -519,6 +548,14 @@ fn DeepChild(comptime T: type) type {
         .Array => |a| a.child,
         else => @compileError("Unsupported Type"),
     };
+}
+
+inline fn wrapRange(len: usize, start: usize, end: usize) struct { start: usize, end: usize } {
+    const wraped_start: usize = if (start > len) len else start;
+    const wraped_end: usize = if (end > len) len else end;
+
+    if (wraped_start == wraped_end) return .{ .start = 0, .end = len };
+    if (wraped_start > wraped_end) return .{ .start = wraped_end, .end = wraped_start };
 }
 
 inline fn wrapIndex(len: usize, idx: anytype) usize {
@@ -870,5 +907,16 @@ test "Mutable backend join" {
         const result = Fluent.init(num_buffer[0..expected_num.len])
             .join(&[_]i32{ 1, 2, 3 }, null, &[_]i32{ 4, 5, 6 });
         try std.testing.expect(result.equal(expected_num));
+    }
+}
+
+test "Mutable backend partition" {
+    const numbers = &[_]i32{ 1, 2, 3, 1, 2, 3, 1, 2, 3 };
+    var buffer: [32]i32 = undefined;
+    {
+        const result = Fluent.init(buffer[0..numbers.len])
+            .copy(numbers)
+            .partion(1, .stable);
+        try std.testing.expect(result.equal(&[_]i32{ 1, 1, 1, 2, 3, 2, 3, 2, 3 }));
     }
 }
