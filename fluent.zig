@@ -184,12 +184,81 @@ fn ImmutableBackend(comptime Self: type) type {
             return (result);
         }
 
-        pub fn countLeading(self: Self, value: Self.DataType) usize {
-            return @call(.always_inline, simdSpan, .{ Self.DataType, value, self.items });
+        pub fn countLeading(self: Self, comptime mode: std.mem.DelimiterType, needle: DelimiterParam(Self.DataType, mode)) usize {
+            var result: usize = 0;
+            switch (mode) {
+                .scalar => {
+                    for (self.items, 0..) |it, i| {
+                        if (it != needle) return (i);
+                    }
+                },
+                .sequence => {
+                    var window = std.mem.window(Self.DataType, self.items, needle.len, needle.len);
+                    while (window.next()) |win| : (result += 1) {
+                        if (std.mem.eql(Self.DataType, win, needle) == false) break;
+                    }
+                },
+                .any => {
+                    for (self.items) |it| {
+                        if (std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{it}) == false) break;
+                        result += 1;
+                    }
+                },
+            }
+            return (result);
         }
 
-        pub fn countUntil(self: Self, value: Self.DataType) usize {
-            return @call(.always_inline, simdCspan, .{ Self.DataType, value, self.items });
+        pub fn countUntil(self: Self, comptime mode: std.mem.DelimiterType, needle: DelimiterParam(Self.DataType, mode)) usize {
+            var result: usize = 0;
+            switch (mode) {
+                .scalar => {
+                    for (self.items, 0..) |it, i| {
+                        if (it == needle) return (i);
+                    }
+                },
+                .sequence => {
+                    if (self.items.len < needle.len) return (0);
+                    var window = std.mem.window(Self.DataType, self.items, needle.len, needle.len);
+                    while (window.next()) |win| : (result += 1) {
+                        if (std.mem.eql(Self.DataType, win, needle) == true) break;
+                    }
+                },
+                .any => {
+                    for (self.items) |it| {
+                        if (std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{it}) == true) break;
+                        result += 1;
+                    }
+                },
+            }
+            return (result);
+        }
+
+        pub fn countTrailing(self: Self, comptime mode: std.mem.DelimiterType, needle: DelimiterParam(Self.DataType, mode)) usize {
+            var result: usize = 0;
+            var rev_iter = std.mem.reverseIterator(self.items);
+            switch (mode) {
+                .scalar => {
+                    while (rev_iter.next()) |item| : (result += 1) {
+                        if (item != needle) break;
+                    }
+                },
+                .sequence => {
+                    if (self.items.len < needle.len) return 0;
+                    var start = self.items.len - needle.len;
+                    while (start != 0) : (start -|= needle.len) {
+                        const window = self.items[start .. start + needle.len];
+                        if (std.mem.eql(Self.DataType, window, needle) == false) break;
+                        result += 1;
+                    }
+                },
+
+                .any => {
+                    while (rev_iter.next()) |item| : (result += 1) {
+                        if (std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{item}) == false) break;
+                    }
+                },
+            }
+            return (result);
         }
 
         ///////////////////////////////////////////////////
@@ -515,48 +584,6 @@ fn simdReduce(
     return rdx;
 }
 
-fn simdCspan(comptime T: type, v: T, items: []T) usize {
-    var i: usize = 0;
-
-    if (comptime std.simd.suggestVectorLength(T)) |N| {
-        const VEC = @Vector(N, T);
-        const mask: VEC = @splat(v);
-
-        while ((i + N) <= items.len) : (i += N) {
-            const block: *const VEC = @ptrCast(@alignCast(items[i..][0..N]));
-            const result = block.* == mask;
-            if (@reduce(.Or, result)) {
-                return (i + @as(usize, (@intCast(std.simd.firstTrue(result) orelse N))));
-            }
-        }
-    }
-    while (i < items.len) : (i += 1) {
-        if (items[i] == v) return (i);
-    }
-    return (i);
-}
-
-fn simdSpan(comptime T: type, v: T, items: []T) usize {
-    var i: usize = 0;
-
-    if (comptime std.simd.suggestVectorLength(T)) |N| {
-        const VEC = @Vector(N, T);
-        const mask: VEC = @splat(v);
-
-        while ((i + N) <= items.len) : (i += N) {
-            const block: *const VEC = @ptrCast(@alignCast(items[i..][0..N]));
-            const result = block.* == mask;
-            if (@reduce(.And, result)) {
-                return (i + @as(usize, (@intCast(std.simd.firstTrue(result) orelse N))));
-            }
-        }
-    }
-    while (i < items.len) : (i += 1) {
-        if (items[i] != v) return (i);
-    }
-    return (i);
-}
-
 // these work for @Vector as well as scalar types
 inline fn maxGeneric(x: anytype, y: anytype) @TypeOf(x) {
     return @max(x, y);
@@ -685,6 +712,60 @@ test "Immutable count" {
     }
 }
 
+test "ImmutableBackend count" {
+    const number = &[_]i32{ 1, 1, 1, 2, 2, 2, 1, 1, 1 };
+    const number2 = &[_]i32{ 1, 2, 1, 2, 1, 3, 3, 3, 1, 2, 1, 2, 1 };
+    // const string = "aaabbbaaa";
+
+    {
+        const result = Fluent.init(number[0..])
+            .countLeading(.scalar, 1);
+        try std.testing.expect(result == 3);
+    }
+    {
+        const result = Fluent.init(number[0..])
+            .countUntil(.scalar, 2);
+        try std.testing.expect(result == 3);
+    }
+    {
+        const result = Fluent.init(number[0..])
+            .countTrailing(.scalar, 1);
+        try std.testing.expect(result == 3);
+    }
+
+    {
+        const result = Fluent.init(number[0..])
+            .countLeading(.sequence, &[_]i32{ 1, 1, 1 });
+        try std.testing.expect(result == 1);
+    }
+    {
+        const result = Fluent.init(number[0..])
+            .countUntil(.sequence, &[_]i32{ 2, 2, 2 });
+        try std.testing.expect(result == 1);
+    }
+    {
+        const result = Fluent.init(number[0..])
+            .countTrailing(.sequence, &[_]i32{ 1, 1, 1 });
+        try std.testing.expect(result == 1);
+    }
+
+    {
+        const result = Fluent.init(number2[0..])
+            .countLeading(.any, &[_]i32{ 1, 2 });
+        try std.testing.expect(result == 5);
+    }
+    {
+        const result = Fluent.init(number2[0..])
+            .countUntil(.any, &[_]i32{ 3, 3 });
+        try std.testing.expect(result == 5);
+    }
+    {
+        const result = Fluent.init(number2[0..])
+            .countTrailing(.any, &[_]i32{ 1, 2 });
+        try std.testing.expect(result == 5);
+    }
+}
+
 //////////////////////////////////
 // Mutable Testing Block ///////
 
@@ -710,9 +791,6 @@ test "Mutable Rotate" {
     const x = Fluent.init(buffer[0..string.len])
         .copy(string)
         .rotate(-3);
-
-    std.debug.print("\n{s}\n\n", .{x.items});
-
     try std.testing.expect(x.equal("abc"));
 }
 
