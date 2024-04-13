@@ -21,14 +21,18 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
 
         pub const SliceType = if (is_const) []const T else []T;
 
-        const Backend = if (is_const) ImmutableBackend else MutableBackend;
-
+        items: SliceType,
+    
         // we can detect if we have a const slice or non-const
         // and dispatch to different versions of this thing
         // depending on the circumstance.
-        items: SliceType,
-    
-        pub usingnamespace Backend(Self);
+
+        pub usingnamespace if (is_const) 
+            ImmutableBackend(Self) else MutableBackend(Self);
+
+        pub usingnamespace if (DataType == u8) blk: {
+            break :blk if (is_const) ImmutableStringBackend(Self) else MutableStringBackend(Self);
+        } else struct {};
     };
 }
 
@@ -67,8 +71,57 @@ fn ImmutableBackend(comptime Self: type) type {
             return findFrom(self, mode, 0, needle);
         }
 
+        pub fn contains(
+            self: Self, 
+            comptime mode: std.mem.DelimiterType,
+            needle: DelimiterParam(Self.DataType, mode),
+        ) bool {
+            return find(self, mode, needle) != null;
+        }
+
+        pub fn containsFrom(
+            self: Self, 
+            comptime mode: std.mem.DelimiterType,
+            start_index: usize,
+            needle: DelimiterParam(Self.DataType, mode),
+        ) bool {
+            return findFrom(self, mode, start_index, needle) != null;
+        }
+
         pub fn get(self: Self, idx: anytype) Self.DataType {
             return self.items[wrapIndex(self.items.len, idx)];
+        }
+
+        pub fn startsWith(        
+            self: Self, 
+            comptime mode: std.mem.DelimiterType,
+            needle: DelimiterParam(Self.DataType, mode),
+        ) bool {
+
+            if (self.items.len == 0)
+                return false;
+            
+            return switch(mode) {
+                .any => blk: { for (needle) |n| { if (self.get(0) == n) break :blk true; } else break :blk false; },
+                .sequence => std.mem.startsWith(Self.DataType, self.items, needle),
+                .scalar => self.get(0) == needle,
+            };
+        }
+
+        pub fn endsWith(        
+            self: Self, 
+            comptime mode: std.mem.DelimiterType,
+            needle: DelimiterParam(Self.DataType, mode),
+        ) bool {
+
+            if (self.items.len == 0)
+                return false;
+            
+            return switch(mode) {
+                .any => blk: { for (needle) |n| { if (self.get(-1) == n) break :blk true; } else break :blk false; },
+                .sequence => std.mem.endsWith(Self.DataType, self.items, needle),
+                .scalar => self.get(-1) == needle,
+            };
         }
 
         // NOTE: 
@@ -153,6 +206,23 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
+        pub fn rotate(self: Self, amount: anytype) Self {
+
+            const len = self.items.len;
+
+            const rot_amt: usize = blk: {
+                if (amount > 0) {
+                    const u: usize = @intCast(amount);
+                    break :blk len - (u % len);
+                }
+                const u: usize = @abs(amount);
+                break :blk u % len;
+            };
+
+            std.mem.rotate(Self.DataType, self.items, rot_amt);
+            return self;
+        }
+
         // TODO: future idea...
 
         // For mapping functions like "abs", only certain types make
@@ -176,6 +246,69 @@ fn MutableBackend(comptime Self: type) type {
     };
 }
 
+//////////////////////////////////
+// ImmutableStringBackend:
+
+inline fn all(self: anytype, predicate: anytype) bool {
+    for (self.items) |x| {
+        if (!predicate(x)) return false;
+    }
+    return true;
+}
+
+// Only activated if the child data type is u8
+fn ImmutableStringBackend(comptime Self: type) type {
+
+    return struct {        
+        pub fn isDigit(self: Self) bool {
+            return all(self, std.ascii.isDigit);
+        }
+        pub fn isAlpha(self: Self) bool {
+            return all(self, std.ascii.isAlphabetic);
+        }
+        pub fn isWhitespace(self: Self) bool {
+            return all(self, std.ascii.isWhitespace);
+        }
+        pub fn isLower(self: Self) bool {
+            return all(self, std.ascii.isLower);
+        }
+        pub fn isUpper(self: Self) bool {
+            return all(self, std.ascii.isUpper);
+        }
+        pub fn isHex(self: Self) bool {
+            return all(self, std.ascii.isHex);
+        }
+        pub fn isASCII(self: Self) bool {
+            return all(self, std.ascii.isASCII);
+        }
+    };
+}
+
+//////////////////////////////////
+// MutableStringBackend:
+
+fn MutableStringBackend(comptime Self: type) type {
+
+    return struct {
+        pub usingnamespace ImmutableStringBackend(Self);
+
+        pub fn lower(self: Self) Self {
+            for (self.items) |*c| c.* = std.ascii.toLower(c.*);            
+            return self;
+        }
+        pub fn upper(self: Self) Self {
+            for (self.items) |*c| c.* = std.ascii.toUpper(c.*);            
+            return self;
+        }
+        pub fn capitalize(self: Self) Self {
+            if (self.items.len > 0)
+                self.items[0] = std.ascii.toUpper(self.items[0]);            
+
+            return self;
+        }
+    };
+}
+
 fn SortFunction(comptime T: type) type {
     return struct {
         fn lessThan(_: void, x: T, y: T) bool {
@@ -192,6 +325,13 @@ fn isConst(comptime T: type) bool {
         .Pointer => |ptr| return ptr.is_const, 
         else => @compileError("Type must coercible to a slice."),
     }
+}
+
+fn isUnsigned(comptime T: type) bool {    
+    return switch (@typeInfo(@TypeOf(T))) {
+        .Int => |i| return i.signedness == .unsigned,
+        else => false,
+    };
 }
 
 fn DelimiterParam(comptime T: type, comptime mode: std.mem.DelimiterType) type {
@@ -351,7 +491,6 @@ test "Immutable Reductions" {
         const result = x.fill(1).product();
         try std.testing.expectEqual(result, 1);
     }    
-
     {
         x.items[4918] =  999;
         const result = x.max();
@@ -375,10 +514,67 @@ test "Mutable Map Chaining" {
 
     const idx = Fluent.init(buffer[0..string.len])
             .copy(string)
-            .map(std.ascii.toLower)
+            .lower()
             .sort(.asc)
             .find(.scalar, 'a') orelse unreachable;
 
     try std.testing.expect(std.mem.eql(u8, buffer[idx..string.len], "abcdefg"));
 }
 
+test "Mutable Rotate" {
+
+    const string: []const u8 = "abc";
+
+    var buffer: [32]u8 = undefined;
+
+    const x = Fluent.init(buffer[0..string.len])
+            .copy(string)
+            .rotate(-3);
+
+    std.debug.print("\n{s}\n\n", .{ x.items });
+    
+    try std.testing.expect(x.equal("abc"));
+}
+
+test "Immutable Starts And Ends With" {
+    
+    const x = Fluent.init("abcdefg");
+
+    try std.testing.expect(x.startsWith(.sequence, "abc"));
+    try std.testing.expect(x.startsWith(.any, "Z#a"));
+    try std.testing.expect(x.startsWith(.scalar, 'a'));
+
+    try std.testing.expect(x.endsWith(.sequence, "efg"));
+    try std.testing.expect(x.endsWith(.any, "h8g"));
+    try std.testing.expect(x.endsWith(.scalar, 'g'));
+}
+
+test "String Backend" {
+
+    const string: []const u8 = "ABCDEFG";
+
+    var buffer: [32]u8 = undefined;
+
+    {
+        const result = Fluent.init(buffer[0..string.len])
+                .copy(string)
+                .isUpper();
+
+        try std.testing.expect(result);
+    }
+    {
+        const result = Fluent.init(buffer[0..string.len])
+                .copy(string)
+                .isAlpha();
+
+        try std.testing.expect(result);
+    }
+    {
+        const x = Fluent.init(buffer[0..string.len])
+                .copy(string)
+                .lower()
+                .capitalize();
+
+        try std.testing.expect(x.equal("Abcdefg"));
+    }
+}
