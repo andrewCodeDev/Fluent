@@ -360,7 +360,19 @@ fn MutableBackend(comptime Self: type) type {
                         }
                     }
                 },
-                .unstable => {},
+                .unstable => {
+                    var i: usize = 0;
+                    while (i < len) : (i += 1) {
+                        if (!predicate(self.items[i])) break;
+                    }
+                    var j: usize = i + 1;
+                    while (j < len) : (j += 1) {
+                        if (predicate(self.items[j])) {
+                            self.swap(i, j);
+                            i += 1;
+                        }
+                    }
+                },
             }
             return (self);
         }
@@ -916,11 +928,18 @@ pub fn isOne(x: i32) bool {
 
 test "Mutable backend partition" {
     const numbers = &[_]i32{ 1, 2, 3, 1, 2, 3, 1, 2, 3 };
+    const numbers_unstable = &[_]i32{ 1, 1, 1, 2, 2, 3, 3, 2, 3 };
     var buffer: [32]i32 = undefined;
     {
         const result = Fluent.init(buffer[0..numbers.len])
             .copy(numbers)
             .partion(isOne, .stable);
         try std.testing.expect(result.equal(&[_]i32{ 1, 1, 1, 2, 3, 2, 3, 2, 3 }));
+    }
+    {
+        const result = Fluent.init(buffer[0..numbers.len])
+            .copy(numbers)
+            .partion(isOne, .unstable);
+        try std.testing.expect(result.equal(numbers_unstable));
     }
 }
