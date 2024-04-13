@@ -184,6 +184,14 @@ fn ImmutableBackend(comptime Self: type) type {
             return (result);
         }
 
+        pub fn countLeading(self: Self, value: Self.DataType) usize {
+            return @call(.always_inline, simdSpan, .{ Self.DataType, value, self.items });
+        }
+
+        pub fn countUntil(self: Self, value: Self.DataType) usize {
+            return @call(.always_inline, simdCspan, .{ Self.DataType, value, self.items });
+        }
+
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
