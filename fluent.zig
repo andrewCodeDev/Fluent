@@ -351,6 +351,26 @@ fn MutableStringBackend(comptime Self: type) type {
                 };
             return self;
         }
+
+        pub fn title(self: Self) Self {
+            var i: usize = 0;
+            var prev: u8 = ' ';
+            while (i < self.items.len) : (i += 1) {
+                switch (self.items[i]) {
+                    'A'...'Z' => {
+                        if (!std.ascii.isWhitespace(prev))
+                            self.items[i] += 32;
+                    },
+                    'a'...'z' => {
+                        if (std.ascii.isWhitespace(prev))
+                            self.items[i] -= 32;
+                    },
+                    else => {},
+                }
+                prev = self.items[i];
+            }
+            return self;
+        }
     };
 }
 
