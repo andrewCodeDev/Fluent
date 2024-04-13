@@ -404,6 +404,58 @@ fn MutableBackend(comptime Self: type) type {
             return self.slice(start, end);
         }
 
+        pub fn set(self: Self, comptime mode: enum { one, range, predicate }, controler: anytype, with: Self.DataType) Self {
+            switch (mode) {
+                .one => {
+                    self.items[controler] = with;
+                },
+                .range => {
+                    const start: usize = controler.start;
+                    const end: usize = controler.end;
+                    @memset(self.items[start..end], with);
+                },
+                .predicate => {
+                    var i: usize = 0;
+                    while (i < self.items.len) : (i += 1) {
+                        if (controler(self.items[i]))
+                            self.items[i] = with;
+                    }
+                },
+            }
+            return (self);
+        }
+
+        test "Mutable backend set" {
+            const string = "This is a string";
+            var buffer: [32]u8 = undefined;
+
+            {
+                const result = Fluent.init(buffer[0..string.len])
+                    .copy(string)
+                    .set(.one, 0, 't');
+                try std.testing.expect(result.equal("this is a string"));
+            }
+            {
+                const result = Fluent.init(buffer[0..string.len])
+                    .copy(string)
+                    .set(.range, .{ .start = 0, .end = 4 }, ' ');
+                try std.testing.expect(result.equal("     is a string"));
+            }
+            {
+                const result = Fluent.init(buffer[0..string.len])
+                    .copy(string)
+                    .set(.predicate, std.ascii.isWhitespace, '_');
+                try std.testing.expect(result.equal("This_is_a_string"));
+            }
+        }
+
+        // pub fn replaceAll(self: Self, old: Self.DataType, new: Self.DataType) Self {
+        //     std.mem.replaceScalar(self.DataType, self.items, old, new);
+        //     return (self);
+        // }
+
+        // pub fn replaceFirst(self: Self, old: Self.DataType, new: Self.DataType) Self {}
+
         pub fn rotate(self: Self, amount: anytype) Self {
             const len = self.items.len;
 
