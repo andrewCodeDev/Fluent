@@ -172,6 +172,8 @@ fn ImmutableBackend(comptime Self: type) type {
                 .sequence => result = std.mem.count(Self.DataType, self.items, needle),
                 .any => {
                     // temporary doing O(N^2) before implementing something smarter
+                    std.debug.assert(self.items.len <= 1000);
+                    std.debug.assert(self.needle.len <= 1000);
                     for (self.items) |it| {
                         for (needle) |n| {
                             if (it == n) result += 1;
