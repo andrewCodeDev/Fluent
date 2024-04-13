@@ -973,7 +973,7 @@ test "Mutable backend join" {
     }
 }
 
-pub fn isOne(x: i32) bool {
+fn isOne(x: i32) bool {
     return if (x == 1) true else false;
 }
 
@@ -1039,5 +1039,23 @@ test "Mutable backend set" {
             .copy(string)
             .set(.predicate, std.ascii.isWhitespace, '_');
         try std.testing.expect(result.equal("This_is_a_string"));
+    }
+}
+
+test "Mutable go brrrr" {
+    const string = "this69_ IS420_ A42_ weird1337_ STRING_";
+    const expected = "This_Is_A_Weird_String_But_I_Like_It";
+    var buffer: [64]u8 = undefined;
+
+    {
+        const result = Fluent.init(buffer[0..])
+            .concat(0, string)
+            .concat(string.len, " BUT_ I_ LIKE_ IT")
+            .lower()
+            .title()
+            .set(.predicate, std.ascii.isDigit, ' ')
+            .partion(std.ascii.isWhitespace, .stable)
+            .trim(std.ascii.isWhitespace, .left);
+        try std.testing.expectEqualStrings(expected[0..expected.len], result.items[0..expected.len]);
     }
 }
