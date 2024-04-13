@@ -252,13 +252,15 @@ fn MutableBackend(comptime Self: type) type {
         }
 
         pub fn join(self: Self, items1: []const Self.DataType, maybe_sep: ?Self.DataType, items2: []const Self.DataType) Self {
-            std.debug.assert(self.items.len <= (items1.len + items2.len + if (maybe_sep != null) 1 else 0));
-            @memcpy(self.items[0..items1.len], items1[0..]);
             if (maybe_sep) |sep| {
+                std.debug.assert(self.items.len <= (items1.len + items2.len + 1));
+                @memcpy(self.items[0..items1.len], items1[0..]);
                 self.items[items1.len] = sep;
-                @memcpy(self.items[items1.len + 1 .. items2.len], items2[0..]);
+                @memcpy(self.items[items1.len + 1 .. items1.len + items2.len + 1], items2[0..]);
             } else {
-                @memcpy(self.items[items1.len..items2.len], items2[0..]);
+                std.debug.assert(self.items.len <= (items1.len + items2.len));
+                @memcpy(self.items[0..items1.len], items1[0..items1.len]);
+                @memcpy(self.items[items1.len..(items1.len + items2.len)], items2[0..]);
             }
             return self;
         }
@@ -771,6 +773,24 @@ test "Mutable Backend concat" {
         const result = Fluent.init(num_buffer[0..expected_num.len])
             .concat(0, &[_]i32{ 1, 2, 3 })
             .concat(3, &[_]i32{ 4, 5, 6 });
+        try std.testing.expect(result.equal(expected_num));
+    }
+}
+
+test "Mutable backend join" {
+    const expected_str = "Hello, World!";
+    const expected_num = &[_]i32{ 1, 2, 3, 4, 5, 6 };
+
+    var str_buffer: [32]u8 = undefined;
+    var num_buffer: [32]i32 = undefined;
+    {
+        const result = Fluent.init(str_buffer[0..expected_str.len])
+            .join("Hello,", ' ', "World!");
+        try std.testing.expect(result.equal(expected_str));
+    }
+    {
+        const result = Fluent.init(num_buffer[0..expected_num.len])
+            .join(&[_]i32{ 1, 2, 3 }, null, &[_]i32{ 4, 5, 6 });
         try std.testing.expect(result.equal(expected_num));
     }
 }
