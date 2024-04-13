@@ -347,15 +347,15 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
-        pub fn partion(self: Self, item: Self.DataType, opt: enum { stable, unstable }) Self {
-            const len = self.items.len;
+        pub fn partion(self: Self, predicate: fn (Self.DataType) bool, opt: enum { stable, unstable }) Self {
+            const len = if (self.items.len >= 2) self.items.len else return self;
             switch (opt) {
                 .stable => {
                     // insertion sort kind of partionionning
                     var i: usize = 1;
                     while (i < len) : (i += 1) {
                         var j: usize = i;
-                        while (j >= 1 and self.items[j - 1] != item and self.items[j] == item) : (j -= 1) {
+                        while (j >= 1 and !predicate(self.items[j - 1]) and predicate(self.items[j])) : (j -= 1) {
                             self.swap(j - 1, j);
                         }
                     }
@@ -910,13 +910,17 @@ test "Mutable backend join" {
     }
 }
 
+pub fn isOne(x: i32) bool {
+    return if (x == 1) true else false;
+}
+
 test "Mutable backend partition" {
     const numbers = &[_]i32{ 1, 2, 3, 1, 2, 3, 1, 2, 3 };
     var buffer: [32]i32 = undefined;
     {
         const result = Fluent.init(buffer[0..numbers.len])
             .copy(numbers)
-            .partion(1, .stable);
+            .partion(isOne, .stable);
         try std.testing.expect(result.equal(&[_]i32{ 1, 1, 1, 2, 3, 2, 3, 2, 3 }));
     }
 }
