@@ -289,23 +289,37 @@ fn ImmutableStringBackend(comptime Self: type) type {
         pub fn isDigit(self: Self) bool {
             return all(self, std.ascii.isDigit);
         }
+
         pub fn isAlpha(self: Self) bool {
             return all(self, std.ascii.isAlphabetic);
         }
-        pub fn isWhitespace(self: Self) bool {
+
+        pub fn isSpaces(self: Self) bool {
             return all(self, std.ascii.isWhitespace);
         }
+
         pub fn isLower(self: Self) bool {
             return all(self, std.ascii.isLower);
         }
+
         pub fn isUpper(self: Self) bool {
             return all(self, std.ascii.isUpper);
         }
+
         pub fn isHex(self: Self) bool {
             return all(self, std.ascii.isHex);
         }
+
         pub fn isASCII(self: Self) bool {
             return all(self, std.ascii.isASCII);
+        }
+
+        pub fn isPrintable(self: Self) bool {
+            return all(self, std.ascii.isPrint);
+        }
+
+        pub fn isAlnum(self: Self) bool {
+            return all(self, std.ascii.isAlphanumeric);
         }
     };
 }
