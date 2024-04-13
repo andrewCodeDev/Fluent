@@ -335,14 +335,20 @@ fn MutableStringBackend(comptime Self: type) type {
             for (self.items) |*c| c.* = std.ascii.toLower(c.*);
             return self;
         }
+
         pub fn upper(self: Self) Self {
             for (self.items) |*c| c.* = std.ascii.toUpper(c.*);
             return self;
         }
+
+        // more inline with the actual python behavior
         pub fn capitalize(self: Self) Self {
             if (self.items.len > 0)
                 self.items[0] = std.ascii.toUpper(self.items[0]);
-
+            if (self.items.len > 1)
+                for (self.items[1..]) |*c| {
+                    c.* = std.ascii.toLower(c.*);
+                };
             return self;
         }
     };
