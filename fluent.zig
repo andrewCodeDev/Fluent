@@ -200,6 +200,19 @@ fn ImmutableBackend(comptime Self: type) type {
             return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, maxGeneric, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
         }
 
+        pub fn write(self: Self, out_buffer: []Self.DataType) Self {
+            if (self.items.len == 0) return self;
+            std.debug.assert(self.items.len < out_buffer.len);
+            @memcpy(out_buffer[0..self.items.len], self.items);
+            return (self);
+        }
+
+        pub fn print(self: Self, comptime format: []const u8, args: anytype) void {
+            const stdout = std.io.getStdOut();
+            const writer = stdout.writer();
+            writer.print(format, args ++ self.items) catch unreachable;
+        }
+
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
@@ -426,6 +439,7 @@ fn MutableBackend(comptime Self: type) type {
 
         pub fn reverse(self: Self) Self {
             std.mem.reverse(Self.DataType, self.items);
+            return (self);
         }
 
         pub fn map(self: Self, f: fn (Self.DataType) Self.DataType) Self {
@@ -1862,3 +1876,145 @@ test "trim(self, opt, kind, actor)             : set" {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+test "rotate(self, amount)                     : MutSelf" {
+    const string = "00110011";
+    var buffer: [8]u8 = undefined;
+
+    {
+        const result = Fluent.init(buffer[0..string.len])
+            .copy(string)
+            .rotate(0);
+        try expect(result.equal(string));
+    }
+
+    {
+        const result = Fluent.init(buffer[0..string.len])
+            .copy(string)
+            .rotate(1);
+        try expect(result.equal("10011001"));
+    }
+
+    {
+        const result = Fluent.init(buffer[0..string.len])
+            .copy(string)
+            .rotate(-1);
+        try expect(result.equal("01100110"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "reverse(self)                            : MutSelf" {
+    const string = "00110011";
+    var buffer: [8]u8 = undefined;
+
+    {
+        const result = Fluent.init(buffer[0..string.len])
+            .copy(string)
+            .reverse()
+            .reverse();
+        try expect(result.equal(string));
+    }
+
+    {
+        const result = Fluent.init(buffer[0..string.len])
+            .copy(string)
+            .reverse();
+        try expect(result.equal("11001100"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////
+// MUTABLE STRING BACKEND    //
+///////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "lower(self)                              : MutSelf" {
+    const string = "THIS IS A STRING";
+    var string_buffer: [16]u8 = undefined;
+
+    {
+        const result = Fluent.init(string_buffer[0..string.len])
+            .copy(string)
+            .lower();
+        try expect(result.equal("this is a string"));
+    }
+
+    {
+        const result = Fluent.init(string_buffer[0..string.len])
+            .copy(string)
+            .slice(0, 4)
+            .lower();
+        try expect(result.equal("this"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "upper(self)                              : MutSelf" {
+    const string = "this is a string";
+    var string_buffer: [16]u8 = undefined;
+
+    {
+        const result = Fluent.init(string_buffer[0..string.len])
+            .copy(string)
+            .upper();
+        try expect(result.equal("THIS IS A STRING"));
+    }
+
+    {
+        const result = Fluent.init(string_buffer[0..string.len])
+            .copy(string)
+            .slice(0, 4)
+            .upper();
+        try expect(result.equal("THIS"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "capitalize(self)                         : MutSelf" {
+    const string = "THIS IS A STRING";
+    var string_buffer: [16]u8 = undefined;
+
+    {
+        const result = Fluent.init(string_buffer[0..string.len])
+            .copy(string)
+            .capitalize();
+        try expect(result.equal("This is a string"));
+    }
+
+    {
+        const result = Fluent.init(string_buffer[0..string.len])
+            .copy(string)
+            .slice(0, 4)
+            .capitalize();
+        try expect(result.equal("This"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "title(self)                              : MutSelf" {
+    const string = "THIS IS A STRING";
+    var string_buffer: [16]u8 = undefined;
+
+    {
+        const result = Fluent.init(string_buffer[0..string.len])
+            .copy(string)
+            .title();
+        try expect(result.equal("This Is A String"));
+    }
+
+    {
+        const result = Fluent.init(string_buffer[0..string.len])
+            .copy(string)
+            .slice(0, 4)
+            .title();
+        try expect(result.equal("This"));
+    }
+}
