@@ -4,8 +4,13 @@ const Order = std.math.Order;
 const ReduceOp = std.builtin.ReduceOp;
 const math = std.math;
 
-//////////////////////////////////
-// Public Access Point ///////////
+////////////////////////////////////////////////////////////////////////////////
+// Public Access Point                                                       ///
+////////////////////////////////////////////////////////////////////////////////
+
+const Fluent = @This();
+pub const FluentMode = std.mem.DelimiterType;
+pub const FluentOption = enum { left, leading, right, trailing, both, all, around, inside, until, stable, unstable, ascending, descending, inverse };
 
 pub fn init(slice: anytype) FluentInterface(DeepChild(@TypeOf(slice)), isConst(@TypeOf(slice))) {
     return .{ .items = slice };
@@ -36,24 +41,31 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
     };
 }
 
-//////////////////////////////////
-// Backends and Implementation ///
+////////////////////////////////////////////////////////////////////////////////
+//                        Backends and Implementation                         //
+////////////////////////////////////////////////////////////////////////////////
 
-//////////////////////////////////
-// ImmutableBackend:
-
-// Used by mutable backend - only suports non-mutating
-// operations over items. Primarily used for reducing,
-// scanning, and indexing. Provides non-mutating iterator
-// support for both Immutable and Mutable backends.
+////////////////////////////////////////////////////////////////////////////////
+// IMMUTABLE BACKEND :                                                        //
+//                                                                            //
+// Used by mutable backend - only suports non-mutating                        //
+// operations over items. Primarily used for reducing,                        //
+// scanning, and indexing. Provides non-mutating iterator                     //
+// support for both Immutable and Mutable backends.                           //
+////////////////////////////////////////////////////////////////////////////////
 
 fn ImmutableBackend(comptime Self: type) type {
     return struct {
+
+        ///////////////////////
+        //  PUBLIC SECTION   //
+        ///////////////////////
+
         pub fn findFrom(
             self: Self,
-            comptime mode: std.mem.DelimiterType,
+            comptime mode: FluentMode,
             start_index: usize,
-            needle: DelimiterParam(Self.DataType, mode),
+            needle: FluentType(Self.DataType, mode),
         ) ?usize {
             return switch (mode) {
                 .any => std.mem.indexOfAnyPos(Self.DataType, self.items, start_index, needle),
@@ -62,39 +74,39 @@ fn ImmutableBackend(comptime Self: type) type {
             };
         }
 
+        pub fn containsFrom(
+            self: Self,
+            comptime mode: FluentMode,
+            start_index: usize,
+            needle: FluentType(Self.DataType, mode),
+        ) bool {
+            return findFrom(self, mode, start_index, needle) != null;
+        }
+
         pub fn find(
             self: Self,
-            comptime mode: std.mem.DelimiterType,
-            needle: DelimiterParam(Self.DataType, mode),
+            comptime mode: FluentMode,
+            needle: FluentType(Self.DataType, mode),
         ) ?usize {
             return findFrom(self, mode, 0, needle);
         }
 
         pub fn contains(
             self: Self,
-            comptime mode: std.mem.DelimiterType,
-            needle: DelimiterParam(Self.DataType, mode),
+            comptime mode: FluentMode,
+            needle: FluentType(Self.DataType, mode),
         ) bool {
             return find(self, mode, needle) != null;
         }
 
-        pub fn containsFrom(
-            self: Self,
-            comptime mode: std.mem.DelimiterType,
-            start_index: usize,
-            needle: DelimiterParam(Self.DataType, mode),
-        ) bool {
-            return findFrom(self, mode, start_index, needle) != null;
-        }
-
-        pub fn get(self: Self, idx: anytype) Self.DataType {
+        pub fn getAt(self: Self, idx: anytype) Self.DataType {
             return self.items[wrapIndex(self.items.len, idx)];
         }
 
         pub fn startsWith(
             self: Self,
-            comptime mode: std.mem.DelimiterType,
-            needle: DelimiterParam(Self.DataType, mode),
+            comptime mode: FluentMode,
+            needle: FluentType(Self.DataType, mode),
         ) bool {
             if (self.items.len == 0)
                 return false;
@@ -102,18 +114,18 @@ fn ImmutableBackend(comptime Self: type) type {
             return switch (mode) {
                 .any => blk: {
                     for (needle) |n| {
-                        if (self.get(0) == n) break :blk true;
+                        if (self.getAt(0) == n) break :blk true;
                     } else break :blk false;
                 },
                 .sequence => std.mem.startsWith(Self.DataType, self.items, needle),
-                .scalar => self.get(0) == needle,
+                .scalar => self.getAt(0) == needle,
             };
         }
 
         pub fn endsWith(
             self: Self,
-            comptime mode: std.mem.DelimiterType,
-            needle: DelimiterParam(Self.DataType, mode),
+            comptime mode: FluentMode,
+            needle: FluentType(Self.DataType, mode),
         ) bool {
             if (self.items.len == 0)
                 return false;
@@ -121,11 +133,27 @@ fn ImmutableBackend(comptime Self: type) type {
             return switch (mode) {
                 .any => blk: {
                     for (needle) |n| {
-                        if (self.get(-1) == n) break :blk true;
+                        if (self.getAt(-1) == n) break :blk true;
                     } else break :blk false;
                 },
                 .sequence => std.mem.endsWith(Self.DataType, self.items, needle),
-                .scalar => self.get(-1) == needle,
+                .scalar => self.getAt(-1) == needle,
+            };
+        }
+
+        /// supported opt = {all, leading/left, trailing/right, until, both/around, inside, inverse}
+        pub fn count(self: Self, opt: FluentOption, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
+            if (self.items.len == 0) return 0;
+
+            return switch (opt) {
+                .all => countAll(self, mode, needle),
+                .leading, .left => countLeading(self, mode, needle),
+                .trailing, .right => countTrailing(self, mode, needle),
+                .until => countUntil(self, mode, needle),
+                .both, .around => countLeading(self, mode, needle) + countTrailing(self, mode, needle),
+                .inside => countAll(self, mode, needle) - (countLeading(self, mode, needle) + countTrailing(self, mode, needle)),
+                .inverse => self.items.len - countAll(self, mode, needle),
+                else => 0,
             };
         }
 
@@ -156,6 +184,7 @@ fn ImmutableBackend(comptime Self: type) type {
             if (self.items.len == 0) return 0;
             return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Mul, mulGeneric, self.items, reduceInit(ReduceOp.Mul, Self.DataType) });
         }
+
         // currently returns inf if items is empty
         pub fn min(self: Self) Self.DataType {
             return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Min, minGeneric, self.items, reduceInit(ReduceOp.Min, Self.DataType) });
@@ -165,9 +194,31 @@ fn ImmutableBackend(comptime Self: type) type {
             return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, maxGeneric, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
         }
 
+        ///////////////////////////////////////////////////
+        // Iterator support ///////////////////////////////
+
+        pub fn split(
+            self: Self,
+            comptime mode: FluentMode,
+            delimiter: FluentType(Self.DataType, mode),
+        ) std.mem.SplitIterator(Self.DataType, mode) {
+            return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
+        }
+
+        pub fn tokenize(
+            self: Self,
+            comptime mode: FluentMode,
+            delimiter: FluentType(Self.DataType, mode),
+        ) std.mem.TokenIterator(Self.DataType, mode) {
+            return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
+        }
+
+        ///////////////////////
+        //  PRIVATE SECTION  //
+        ///////////////////////
+
         /// count the occurence of needles in self.items returns 0 if no match is found
-        pub fn count(self: Self, comptime mode: std.mem.DelimiterType, needle: DelimiterParam(Self.DataType, mode)) usize {
-            if (self.items.len == 0) return 0;
+        fn countAll(self: Self, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
             var result: usize = 0;
 
             switch (mode) {
@@ -191,7 +242,7 @@ fn ImmutableBackend(comptime Self: type) type {
             return (result);
         }
 
-        pub fn countLeading(self: Self, comptime mode: std.mem.DelimiterType, needle: DelimiterParam(Self.DataType, mode)) usize {
+        fn countLeading(self: Self, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
             var result: usize = 0;
             switch (mode) {
                 .scalar => {
@@ -215,7 +266,7 @@ fn ImmutableBackend(comptime Self: type) type {
             return (result);
         }
 
-        pub fn countUntil(self: Self, comptime mode: std.mem.DelimiterType, needle: DelimiterParam(Self.DataType, mode)) usize {
+        fn countUntil(self: Self, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
             var result: usize = 0;
             switch (mode) {
                 .scalar => {
@@ -240,7 +291,7 @@ fn ImmutableBackend(comptime Self: type) type {
             return (result);
         }
 
-        pub fn countTrailing(self: Self, comptime mode: std.mem.DelimiterType, needle: DelimiterParam(Self.DataType, mode)) usize {
+        fn countTrailing(self: Self, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
             var result: usize = 0;
             var rev_iter = std.mem.reverseIterator(self.items);
             switch (mode) {
@@ -267,42 +318,27 @@ fn ImmutableBackend(comptime Self: type) type {
             }
             return (result);
         }
-
-        ///////////////////////////////////////////////////
-        // Iterator support ///////////////////////////////
-
-        pub fn split(
-            self: Self,
-            comptime mode: std.mem.DelimiterType,
-            delimiter: DelimiterParam(Self.DataType, mode),
-        ) std.mem.SplitIterator(Self.DataType, mode) {
-            return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
-        }
-
-        pub fn tokenize(
-            self: Self,
-            comptime mode: std.mem.DelimiterType,
-            delimiter: DelimiterParam(Self.DataType, mode),
-        ) std.mem.TokenIterator(Self.DataType, mode) {
-            return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
-        }
     };
 }
 
-//////////////////////////////////
-// MutableBackend:
-
-// Only suports mutating operations on items.
-// Operations include sorting, replacing,
-// permutations, and partitioning.
+////////////////////////////////////////////////////////////////////////////////
+// MUTABLE BACKEND                                                            //
+//                                                                            //
+// Only suports mutating operations on items.                                 //
+// Operations include sorting, replacing,                                     //
+// permutations, and partitioning.                                            //
+////////////////////////////////////////////////////////////////////////////////
 
 fn MutableBackend(comptime Self: type) type {
     return struct {
 
+        ///////////////////////
+        //  PUBLIC SECTION   //
+        ///////////////////////
+
         // includes operations like reduce, find, and iterators
         pub usingnamespace ImmutableBackend(Self);
 
-        // calls std.sort.block
         pub fn sort(self: Self, comptime mode: enum { asc, desc }) Self {
             const SF = SortFunction(Self.DataType);
             const func = if (mode == .asc) SF.lessThan else SF.greaterThan;
@@ -320,110 +356,54 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
-        pub fn concat(self: Self, index: usize, items: []const Self.DataType) Self {
-            std.debug.assert(index < self.items.len);
-            std.debug.assert(index + items.len <= self.items.len);
-            @memcpy(self.items[index..(index + items.len)], items[0..items.len]);
-            return self;
-        }
-
         pub fn swap(self: Self, idx1: usize, idx2: usize) void {
             const temp = self.items[wrapIndex(self.items.len, idx1)];
             self.items[wrapIndex(self.items.len, idx1)] = self.items[wrapIndex(self.items.len, idx2)];
             self.items[wrapIndex(self.items.len, idx2)] = temp;
         }
 
-        pub fn join(self: Self, items1: []const Self.DataType, maybe_sep: ?Self.DataType, items2: []const Self.DataType) Self {
-            if (maybe_sep) |sep| {
-                std.debug.assert(self.items.len <= (items1.len + items2.len + 1));
-                @memcpy(self.items[0..items1.len], items1[0..]);
-                self.items[items1.len] = sep;
-                @memcpy(self.items[items1.len + 1 .. items1.len + items2.len + 1], items2[0..]);
-            } else {
-                std.debug.assert(self.items.len <= (items1.len + items2.len));
-                @memcpy(self.items[0..items1.len], items1[0..items1.len]);
-                @memcpy(self.items[items1.len..(items1.len + items2.len)], items2[0..]);
+        pub fn concat(self: Self, items: []const Self.DataType, concat_buffer: []Self.DataType) Self {
+            std.debug.assert(self.items.len + items.len <= concat_buffer.len);
+            var concat_index: usize = self.items.len;
+            @memcpy(concat_buffer[0..self.items.len], self.items);
+            @memcpy(concat_buffer[concat_index..][0..items.len], items);
+            concat_index += items.len;
+            return .{ .items = concat_buffer[0..concat_index] };
+        }
+
+        pub fn join(self: Self, collection: []const []const Self.DataType, join_buffer: []Self.DataType) Self {
+            std.debug.assert(self.items.len < join_buffer.len);
+            var curr_idx: usize = self.items.len;
+
+            @memcpy(join_buffer[0..self.items.len], self.items);
+            for (collection) |items| {
+                std.debug.assert(curr_idx + items.len <= join_buffer.len);
+                @memcpy(join_buffer[curr_idx..][0..items.len], items);
+                curr_idx += items.len;
             }
-            return self;
+            return .{ .items = join_buffer[0..curr_idx] };
         }
 
         pub fn partion(self: Self, predicate: fn (Self.DataType) bool, opt: enum { stable, unstable }) Self {
-            const len = if (self.items.len >= 2) self.items.len else return self;
             switch (opt) {
-                .stable => {
-                    // insertion sort kind of partionionning
-                    var i: usize = 1;
-                    while (i < len) : (i += 1) {
-                        var j: usize = i;
-                        while (j >= 1 and !predicate(self.items[j - 1]) and predicate(self.items[j])) : (j -= 1) {
-                            self.swap(j - 1, j);
-                        }
-                    }
-                },
-                .unstable => {
-                    var i: usize = 0;
-                    while (i < len) : (i += 1) {
-                        if (!predicate(self.items[i])) break;
-                    }
-                    var j: usize = i + 1;
-                    while (j < len) : (j += 1) {
-                        if (predicate(self.items[j])) {
-                            self.swap(i, j);
-                            i += 1;
-                        }
-                    }
-                },
+                .stable => stablePartition(Self.DataType, self, predicate),
+                .unstable => unstablePartition(Self.DataType, self, predicate),
             }
             return (self);
         }
 
-        pub fn trim(self: Self, predicate: fn (Self.DataType) bool, opt: enum { left, right, both }) Self {
-            if (self.items.len <= 1) return self;
-            var start: usize = 0;
-            var end: usize = self.items.len;
-            switch (opt) {
-                .left => {
-                    while (start < end) : (start += 1) {
-                        if (!predicate(self.items[start])) break;
-                    }
+        pub fn trim(self: Self, comptime direction: FluentOption, comptime mode: FluentMode, to_trim: FluentType(Self.DataType, mode)) Self {
+            return switch (mode) {
+                .any => .{
+                    .items = switch (direction) {
+                        .left => std.mem.trimLeft(Self.DataType, self.items, to_trim),
+                        .right => std.mem.trimRight(Self.DataType, self.items, to_trim),
+                        .both => std.mem.trim(Self.DataType, self.items, to_trim),
+                    },
                 },
-                .right => {
-                    while (end > start) : (end -= 1) {
-                        if (!predicate(self.items[end - 1])) break;
-                    }
-                },
-                .both => {
-                    while (start < end) : (start += 1) {
-                        if (!predicate(self.items[start])) break;
-                    }
-                    while (end > start) : (end -= 1) {
-                        if (!predicate(self.items[end - 1])) break;
-                    }
-                },
-            }
-            return self.slice(start, end);
-        }
-
-        /// EXPERIMENTAL
-        pub fn set(self: Self, comptime mode: enum { one, range, predicate }, controler: anytype, with: Self.DataType) Self {
-            switch (mode) {
-                .one => {
-                    self.items[controler] = with;
-                },
-                .range => {
-                    const start: usize = controler.start;
-                    const end: usize = controler.end;
-                    @memset(self.items[start..end], with);
-                },
-                .predicate => {
-                    var i: usize = 0;
-                    while (i < self.items.len) : (i += 1) {
-                        if (controler(self.items[i]))
-                            self.items[i] = with;
-                    }
-                },
-            }
-            return (self);
+                .predicate => trimIf(self, direction, to_trim),
+                .scalar => trimScalar(self, direction, to_trim),
+            };
         }
 
         pub fn rotate(self: Self, amount: anytype) Self {
@@ -442,42 +422,97 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
-        // TODO: future idea...
+        pub fn reverse(self: Self) Self {
+            std.mem.reverse(Self.DataType, self.items);
+        }
 
-        // For mapping functions like "abs", only certain types make
-        // sense there. We could prohbit those or make them no-ops
-        // for certain types of scalar values... u8, for instance,
-        // would be a no-op. Other types could be vectorized with
-        // SIMD and use the builtin @abs function. For things that
-        // can be vectorized, we should probably provide member
-        // functions for those and make them no-ops if they don't
-        // apply.
-
-        // Another option is to compose backends for math-ish operations
-        // that don't make sense across types and only expose them if
-        // they make sense for the Self.DataType.
-
-        // Meanwhile, we can always have a `map` fallback.
         pub fn map(self: Self, f: fn (Self.DataType) Self.DataType) Self {
             for (self.items) |*x| x.* = f(x.*);
             return self;
         }
+
+        ///////////////////////
+        //  PRIVATE SECTION  //
+        ///////////////////////
+
+        fn trimIf(self: Self, comptime direction: FluentOption, predicate: fn (Self.DataType) bool) Self {
+            if (self.items.len <= 1) return self;
+            var start: usize = 0;
+            var end: usize = self.items.len;
+
+            if (direction == .left or direction == .both) {
+                while (start < end and predicate(self.items[start])) start += 1;
+            }
+            if (direction == .right or direction == .both) {
+                while (end > start and predicate(self.items[end - 1])) end -= 1;
+            }
+            return self.slice(start, end);
+        }
+
+        fn trimScalar(self: Self, comptime direction: FluentOption, value: Self.DataType) Self {
+            if (self.items.len <= 1) return self;
+            var start: usize = 0;
+            var end: usize = self.items.len;
+
+            if (direction == .left or direction == .both) {
+                while (start < end and self.items[start] == value) start += 1;
+            }
+            if (direction == .right or direction == .both) {
+                while (end > start and self.items[end - 1] == value) end -= 1;
+            }
+            return self.slice(start, end);
+        }
+
+        fn stablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
+            if (self.items.len < 2)
+                return;
+            var i: usize = 1;
+            while (i < self.items.len) : (i += 1) {
+                var j: usize = i;
+                while (j >= 1 and !predicate(self.items[j - 1]) and predicate(self.items[j])) : (j -= 1) {
+                    self.swap(j - 1, j);
+                }
+            }
+        }
+
+        fn unstablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
+            if (self.items.len < 2)
+                return;
+
+            var i: usize = 0;
+            var j: usize = self.items.len - 1;
+
+            while (true) : ({
+                i += 1;
+                j -= 1;
+            }) {
+                while (i < j and predicate(self.items[i]))
+                    i += 1;
+
+                while (i < j and !predicate(self.items[j]))
+                    j -= 1;
+
+                if (i >= j) return;
+
+                std.mem.swap(T, &self.items[i], &self.items[j]);
+            }
+        }
     };
 }
 
-//////////////////////////////////
-// ImmutableStringBackend:
+////////////////////////////////////////////////////////////////////////////////
+// IMMUTABLE BACKEND :                                                        //
+//                                                                            //
+// Only activated if the child data type is u8                                //
+////////////////////////////////////////////////////////////////////////////////
 
-inline fn all(self: anytype, predicate: anytype) bool {
-    for (self.items) |x| {
-        if (!predicate(x)) return false;
-    }
-    return true;
-}
-
-// Only activated if the child data type is u8
 fn ImmutableStringBackend(comptime Self: type) type {
     return struct {
+
+        ///////////////////////
+        //  PUBLIC SECTION   //
+        ///////////////////////
+
         pub fn isDigit(self: Self) bool {
             return all(self, std.ascii.isDigit);
         }
@@ -513,14 +548,26 @@ fn ImmutableStringBackend(comptime Self: type) type {
         pub fn isAlnum(self: Self) bool {
             return all(self, std.ascii.isAlphanumeric);
         }
+
+        ///////////////////////
+        //  PRIVATE SECTION  //
+        ///////////////////////
     };
 }
 
-//////////////////////////////////
-// MutableStringBackend:
+////////////////////////////////////////////////////////////////////////////////
+// MUTABLE BACKEND :                                                          //
+//                                                                            //
+// Only activated if the child data type is u8                                //
+////////////////////////////////////////////////////////////////////////////////
 
 fn MutableStringBackend(comptime Self: type) type {
     return struct {
+
+        ///////////////////////
+        //  PUBLIC SECTION   //
+        ///////////////////////
+
         pub usingnamespace ImmutableStringBackend(Self);
 
         pub fn lower(self: Self) Self {
@@ -563,8 +610,16 @@ fn MutableStringBackend(comptime Self: type) type {
             }
             return self;
         }
+
+        ///////////////////////
+        //  PRIVATE SECTION  //
+        ///////////////////////
     };
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// PRIVATE HELPERS :                                                          //
+////////////////////////////////////////////////////////////////////////////////
 
 fn SortFunction(comptime T: type) type {
     return struct {
@@ -591,7 +646,7 @@ fn isUnsigned(comptime T: type) bool {
     };
 }
 
-fn DelimiterParam(comptime T: type, comptime mode: std.mem.DelimiterType) type {
+fn FluentType(comptime T: type, comptime mode: FluentMode) type {
     return switch (mode) {
         .sequence, .any => []const T,
         .scalar => T,
@@ -609,6 +664,13 @@ fn DeepChild(comptime T: type) type {
         .Array => |a| a.child,
         else => @compileError("Unsupported Type"),
     };
+}
+
+inline fn all(self: anytype, predicate: anytype) bool {
+    for (self.items) |x| {
+        if (!predicate(x)) return false;
+    }
+    return true;
 }
 
 inline fn wrapRange(len: usize, start: usize, end: usize) struct { start: usize, end: usize } {
@@ -698,364 +760,510 @@ inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x) {
     return x * y;
 }
 
-//////////////////////////////////
-// Immutable Testing Block ///////
+////////////////////////////////////////////////////////////////////////////////
+// TESTING BLOCK :                                                           ///
+////////////////////////////////////////////////////////////////////////////////
 
-const Fluent = @This();
+const testing = std.testing;
+const testing_allocator = std.testing.allocator;
+const expect = std.testing.expect;
 
-test "Immutable Find Functions" {
-    const x = Fluent.init("Hello, World!");
-    const i = x.find(.scalar, ' ') orelse unreachable;
-    const j = x.findFrom(.scalar, i, '!') orelse unreachable;
-    try std.testing.expectEqual(6, i);
-    try std.testing.expectEqual(12, j);
-}
+////////////////////////
+// IMMUTABLE BACKEND  //
+////////////////////////
 
-test "Immutable at Function" {
-    const x = Fluent.init("Hello, World!");
-    { // Normal indexing...
-        const a = x.get(1);
-        const b = x.get(2);
-        const c = x.get(3);
-        try std.testing.expectEqual('e', a);
-        try std.testing.expectEqual('l', b);
-        try std.testing.expectEqual('l', c);
+test "findFrom(self, mode, start_index, needle) : scalar" {
+    const self = Fluent.init("This is a test");
+
+    {
+        const result = self.findFrom(.scalar, 0, 'T') orelse unreachable;
+        try expect(result == 0);
     }
-    { // Pythonic indexing...
-        const a = x.get(-1);
-        const b = x.get(-2);
-        const c = x.get(-3);
-        try std.testing.expectEqual('!', a);
-        try std.testing.expectEqual('d', b);
-        try std.testing.expectEqual('l', c);
-    }
-}
 
-test "Immutable Iterators" {
-    const x = Fluent.init("this is a test");
-    { // split iterators
-        var itr = x.split(.scalar, ' ');
-        const s0 = Fluent.init(itr.next() orelse unreachable);
-        const s1 = Fluent.init(itr.next() orelse unreachable);
-        const s2 = Fluent.init(itr.next() orelse unreachable);
-        const s3 = Fluent.init(itr.next() orelse unreachable);
-        std.debug.assert(s0.equal("this"));
-        std.debug.assert(s1.equal("is"));
-        std.debug.assert(s2.equal("a"));
-        std.debug.assert(s3.equal("test"));
-        std.debug.assert(itr.next() == null);
+    {
+        const result = self.findFrom(.scalar, 12, 't') orelse unreachable;
+        try expect(result == 13);
+    }
+
+    {
+        const result = self.findFrom(.scalar, 6, 's') orelse unreachable;
+        try expect(result == 6);
     }
 }
 
-test "Immutable Reductions" {
-    const x = Fluent.init(try std.testing.allocator.alloc(i32, 10000));
-    defer std.testing.allocator.free(x.items);
+test "findFrom(self, mode, start_index, needle) : sequence" {
+    const self = Fluent.init("This is a test");
+
     {
-        const result = x.fill(2).sum();
-        try std.testing.expectEqual(result, 20000);
+        const result = self.findFrom(.sequence, 0, "This") orelse unreachable;
+        try expect(result == 0);
     }
+
     {
-        const result = x.fill(1).product();
-        try std.testing.expectEqual(result, 1);
+        const result = self.findFrom(.sequence, 9, "test") orelse unreachable;
+        try expect(result == 10);
     }
+
     {
-        x.items[4918] = 999;
-        const result = x.max();
-        try std.testing.expectEqual(result, 999);
-    }
-    {
-        x.items[9176] = -999;
-        const result = x.min();
-        try std.testing.expectEqual(result, -999);
+        const result = self.findFrom(.sequence, 5, "is") orelse unreachable;
+        try expect(result == 5);
     }
 }
 
-test "Immutable count" {
-    const number = &[_]i32{ 1, 2, 3, 1, 2, 3, 1, 2, 3 };
-    const num_scalar = 1;
-    const num_sequence = &[_]i32{ 1, 2, 3 };
-    const num_any = &[_]i32{ 3, 1 };
-    const string = "This is a string";
-    const str_scalar = 's';
-    const str_sequence = "is";
-    const str_any = "sti";
+test "findFrom(self, mode, start_index, needle) : any" {
+    const self = Fluent.init("This is a test");
 
     {
-        const result = Fluent.init(number[0..])
-            .count(.scalar, num_scalar);
-        try std.testing.expect(result == 3);
+        const result = self.findFrom(.any, 0, "T") orelse unreachable;
+        try expect(result == 0);
     }
+
     {
-        const result = Fluent.init(number[0..])
-            .count(.sequence, num_sequence);
-        try std.testing.expect(result == 3);
+        const result = self.findFrom(.any, 9, "test") orelse unreachable;
+        try expect(result == 10);
     }
+
     {
-        const result = Fluent.init(number[0..])
-            .count(.any, num_any);
-        try std.testing.expect(result == 6);
-    }
-    {
-        const result = Fluent.init(string[0..])
-            .count(.scalar, str_scalar);
-        try std.testing.expect(result == 3);
-    }
-    {
-        const result = Fluent.init(string[0..])
-            .count(.sequence, str_sequence);
-        try std.testing.expect(result == 2);
-    }
-    {
-        const result = Fluent.init(string[0..])
-            .count(.any, str_any);
-        try std.testing.expect(result == 7);
+        const result = self.findFrom(.any, 5, "is") orelse unreachable;
+        try expect(result == 5);
     }
 }
 
-test "ImmutableBackend count" {
-    const number = &[_]i32{ 1, 1, 1, 2, 2, 2, 1, 1, 1 };
-    const number2 = &[_]i32{ 1, 2, 1, 2, 1, 3, 3, 3, 1, 2, 1, 2, 1 };
-    // const string = "aaabbbaaa";
+////////////////////////////////////////////////////////////////////////////////
+
+test "find(self, mode, needle)                  : scalar" {
+    const self = Fluent.init("This is a testz");
 
     {
-        const result = Fluent.init(number[0..])
-            .countLeading(.scalar, 1);
-        try std.testing.expect(result == 3);
-    }
-    {
-        const result = Fluent.init(number[0..])
-            .countUntil(.scalar, 2);
-        try std.testing.expect(result == 3);
-    }
-    {
-        const result = Fluent.init(number[0..])
-            .countTrailing(.scalar, 1);
-        try std.testing.expect(result == 3);
+        const result = self.find(.scalar, 'T') orelse unreachable;
+        try expect(result == 0);
     }
 
     {
-        const result = Fluent.init(number[0..])
-            .countLeading(.sequence, &[_]i32{ 1, 1, 1 });
-        try std.testing.expect(result == 1);
-    }
-    {
-        const result = Fluent.init(number[0..])
-            .countUntil(.sequence, &[_]i32{ 2, 2, 2 });
-        try std.testing.expect(result == 1);
-    }
-    {
-        const result = Fluent.init(number[0..])
-            .countTrailing(.sequence, &[_]i32{ 1, 1, 1 });
-        try std.testing.expect(result == 1);
+        const result = self.find(.scalar, 'z') orelse unreachable;
+        try expect(result == self.items.len - 1);
     }
 
     {
-        const result = Fluent.init(number2[0..])
-            .countLeading(.any, &[_]i32{ 1, 2 });
-        try std.testing.expect(result == 5);
-    }
-    {
-        const result = Fluent.init(number2[0..])
-            .countUntil(.any, &[_]i32{ 3, 3 });
-        try std.testing.expect(result == 5);
-    }
-    {
-        const result = Fluent.init(number2[0..])
-            .countTrailing(.any, &[_]i32{ 1, 2 });
-        try std.testing.expect(result == 5);
+        const result = self.find(.scalar, 'i') orelse unreachable;
+        try expect(result == 2);
     }
 }
 
-//////////////////////////////////
-// Mutable Testing Block ///////
-
-test "Mutable Map Chaining" {
-    const string: []const u8 = "A B C D E F G";
-
-    var buffer: [32]u8 = undefined;
-
-    const idx = Fluent.init(buffer[0..string.len])
-        .copy(string)
-        .lower()
-        .sort(.asc)
-        .find(.scalar, 'a') orelse unreachable;
-
-    try std.testing.expect(std.mem.eql(u8, buffer[idx..string.len], "abcdefg"));
-}
-
-test "Mutable Rotate" {
-    const string: []const u8 = "abc";
-
-    var buffer: [32]u8 = undefined;
-
-    const x = Fluent.init(buffer[0..string.len])
-        .copy(string)
-        .rotate(-3);
-    try std.testing.expect(x.equal("abc"));
-}
-
-test "Immutable Starts And Ends With" {
-    const x = Fluent.init("abcdefg");
-
-    try std.testing.expect(x.startsWith(.sequence, "abc"));
-    try std.testing.expect(x.startsWith(.any, "Z#a"));
-    try std.testing.expect(x.startsWith(.scalar, 'a'));
-
-    try std.testing.expect(x.endsWith(.sequence, "efg"));
-    try std.testing.expect(x.endsWith(.any, "h8g"));
-    try std.testing.expect(x.endsWith(.scalar, 'g'));
-}
-
-test "String Backend" {
-    const string: []const u8 = "ABCDEFG";
-
-    var buffer: [32]u8 = undefined;
+test "find(self, mode, needle)                  : sequence" {
+    const self = Fluent.init("This is a testz");
 
     {
-        const result = Fluent.init(buffer[0..string.len])
-            .copy(string)
-            .isUpper();
-
-        try std.testing.expect(result);
+        const result = self.find(.sequence, "This") orelse unreachable;
+        try expect(result == 0);
     }
-    {
-        const result = Fluent.init(buffer[0..string.len])
-            .copy(string)
-            .isAlpha();
 
-        try std.testing.expect(result);
+    {
+        const result = self.find(.sequence, "testz") orelse unreachable;
+        try expect(result == 10);
     }
-    {
-        const x = Fluent.init(buffer[0..string.len])
-            .copy(string)
-            .lower()
-            .capitalize();
 
-        try std.testing.expect(x.equal("Abcdefg"));
+    {
+        const result = self.find(.sequence, "is") orelse unreachable;
+        try expect(result == 2);
     }
 }
 
-test "Mutable Backend concat" {
-    const expected_str = "Hello, World!";
-    const expected_num = &[_]i32{ 1, 2, 3, 4, 5, 6 };
+test "find(self, mode, needle)                  : any" {
+    const self = Fluent.init("This is a testz");
 
-    var str_buffer: [32]u8 = undefined;
-    var num_buffer: [32]i32 = undefined;
     {
-        const result = Fluent.init(str_buffer[0..expected_str.len])
-            .concat(0, "Hello, ")
-            .concat(7, "World!");
-        try std.testing.expect(result.equal(expected_str));
+        const result = self.find(.any, "T") orelse unreachable;
+        try expect(result == 0);
     }
+
     {
-        const result = Fluent.init(num_buffer[0..expected_num.len])
-            .concat(0, &[_]i32{ 1, 2, 3 })
-            .concat(3, &[_]i32{ 4, 5, 6 });
-        try std.testing.expect(result.equal(expected_num));
+        const result = self.find(.any, "z") orelse unreachable;
+        try expect(result == self.items.len - 1);
+    }
+
+    {
+        const result = self.find(.any, "is") orelse unreachable;
+        try expect(result == 2);
     }
 }
 
-test "Mutable backend join" {
-    const expected_str = "Hello, World!";
-    const expected_num = &[_]i32{ 1, 2, 3, 4, 5, 6 };
+////////////////////////////////////////////////////////////////////////////////
 
-    var str_buffer: [32]u8 = undefined;
-    var num_buffer: [32]i32 = undefined;
+test "containsFrom(self, mode, needle)          : scalar" {
+    const self = Fluent.init("This is a test");
+
     {
-        const result = Fluent.init(str_buffer[0..expected_str.len])
-            .join("Hello,", ' ', "World!");
-        try std.testing.expect(result.equal(expected_str));
+        const result = self.containsFrom(.scalar, 0, 'T');
+        try expect(result == true);
     }
+
     {
-        const result = Fluent.init(num_buffer[0..expected_num.len])
-            .join(&[_]i32{ 1, 2, 3 }, null, &[_]i32{ 4, 5, 6 });
-        try std.testing.expect(result.equal(expected_num));
+        const result = self.containsFrom(.scalar, 12, 't');
+        try expect(result == true);
+    }
+
+    {
+        const result = self.containsFrom(.scalar, 6, 's');
+        try expect(result == true);
     }
 }
 
-fn isOne(x: i32) bool {
-    return if (x == 1) true else false;
-}
+test "containsFrom(self, mode, needle)          : sequence" {
+    const self = Fluent.init("This is a test");
 
-test "Mutable backend partition" {
-    const numbers = &[_]i32{ 1, 2, 3, 1, 2, 3, 1, 2, 3 };
-    const numbers_unstable = &[_]i32{ 1, 1, 1, 2, 2, 3, 3, 2, 3 };
-    var buffer: [32]i32 = undefined;
     {
-        const result = Fluent.init(buffer[0..numbers.len])
-            .copy(numbers)
-            .partion(isOne, .stable);
-        try std.testing.expect(result.equal(&[_]i32{ 1, 1, 1, 2, 3, 2, 3, 2, 3 }));
+        const result = self.containsFrom(.sequence, 0, "This");
+        try expect(result == true);
     }
+
     {
-        const result = Fluent.init(buffer[0..numbers.len])
-            .copy(numbers)
-            .partion(isOne, .unstable);
-        try std.testing.expect(result.equal(numbers_unstable));
+        const result = self.containsFrom(.sequence, 9, "test");
+        try expect(result == true);
+    }
+
+    {
+        const result = self.containsFrom(.sequence, 5, "is");
+        try expect(result == true);
     }
 }
 
-test "Mutable backend trim" {
-    const untrimed_str = "     This is a string     ";
-
-    var buffer: [32]u8 = undefined;
-    {
-        const result = Fluent.init(buffer[0..untrimed_str.len])
-            .copy(untrimed_str)
-            .trim(std.ascii.isWhitespace, .left);
-        try std.testing.expect(result.equal("This is a string     "));
-    }
-    {
-        const result = Fluent.init(buffer[0..untrimed_str.len])
-            .copy(untrimed_str)
-            .trim(std.ascii.isWhitespace, .right);
-        try std.testing.expect(result.equal("     This is a string"));
-    }
-    {
-        const result = Fluent.init(buffer[0..untrimed_str.len])
-            .copy(untrimed_str)
-            .trim(std.ascii.isWhitespace, .both);
-        try std.testing.expect(result.equal("This is a string"));
-    }
-}
-test "Mutable backend set" {
-    const string = "This is a string";
-    var buffer: [32]u8 = undefined;
+test "containsFrom(self, mode, needle)          : any" {
+    const self = Fluent.init("This is a test");
 
     {
-        const result = Fluent.init(buffer[0..string.len])
-            .copy(string)
-            .set(.one, 0, 't');
-        try std.testing.expect(result.equal("this is a string"));
+        const result = self.containsFrom(.sequence, 0, "This");
+        try expect(result == true);
     }
+
     {
-        const result = Fluent.init(buffer[0..string.len])
-            .copy(string)
-            .set(.range, .{ .start = 0, .end = 4 }, ' ');
-        try std.testing.expect(result.equal("     is a string"));
+        const result = self.containsFrom(.sequence, 9, "test");
+        try expect(result == true);
     }
+
     {
-        const result = Fluent.init(buffer[0..string.len])
-            .copy(string)
-            .set(.predicate, std.ascii.isWhitespace, '_');
-        try std.testing.expect(result.equal("This_is_a_string"));
+        const result = self.containsFrom(.sequence, 5, "is");
+        try expect(result == true);
     }
 }
 
-test "Mutable go brrrr" {
-    const string = "this69_ IS420_ A42_ weird1337_ STRING_";
-    const expected = "This_Is_A_Weird_String_But_I_Like_It";
-    var buffer: [64]u8 = undefined;
+////////////////////////////////////////////////////////////////////////////////
+
+test "contains(self, mode, needle)             : scalar" {
+    const self = Fluent.init("This is a testz");
 
     {
-        const result = Fluent.init(buffer[0..])
-            .concat(0, string)
-            .concat(string.len, " BUT_ I_ LIKE_ IT")
-            .lower()
-            .title()
-            .set(.predicate, std.ascii.isDigit, ' ')
-            .partion(std.ascii.isWhitespace, .stable)
-            .trim(std.ascii.isWhitespace, .left);
-        try std.testing.expectEqualStrings(expected[0..expected.len], result.items[0..expected.len]);
+        const result = self.contains(.scalar, 'T');
+        try expect(result == true);
+    }
+
+    {
+        const result = self.contains(.scalar, 'z');
+        try expect(result == true);
+    }
+
+    {
+        const result = self.contains(.scalar, 's');
+        try expect(result == true);
     }
 }
+
+test "contains(self, mode, needle)             : sequence" {
+    const self = Fluent.init("This is a testz");
+
+    {
+        const result = self.contains(.sequence, "This");
+        try expect(result == true);
+    }
+
+    {
+        const result = self.contains(.sequence, "testz");
+        try expect(result == true);
+    }
+
+    {
+        const result = self.contains(.sequence, "is");
+        try expect(result == true);
+    }
+}
+
+test "contains(self, mode, needle)             : any" {
+    const self = Fluent.init("This is a testz");
+
+    {
+        const result = self.contains(.any, "This");
+        try expect(result == true);
+    }
+
+    {
+        const result = self.contains(.any, "testz");
+        try expect(result == true);
+    }
+
+    {
+        const result = self.contains(.any, "is");
+        try expect(result == true);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "getAt(self, idx)                         : scalar" {
+    const self = Fluent.init("This is a testz");
+
+    {
+        const result = self.getAt(0);
+        try expect(result == 'T');
+    }
+
+    {
+        const result = self.getAt(self.items.len - 1);
+        try expect(result == 'z');
+    }
+
+    {
+        const result = self.getAt(-1);
+        try expect(result == 'z');
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "startsWith(self, mode, needle)           : scalar" {
+    const self = Fluent.init("This is a testz");
+
+    {
+        const result = self.startsWith(.scalar, 'T');
+        try expect(result == true);
+    }
+
+    {
+        const result = self.startsWith(.scalar, 't');
+        try expect(result == false);
+    }
+
+    {
+        const result = self.startsWith(.scalar, 'z');
+        try expect(result == false);
+    }
+}
+
+test "startsWith(self, mode, needle)           : sequence" {
+    const self = Fluent.init("This is a testz");
+
+    {
+        const result = self.startsWith(.sequence, "This");
+        try expect(result == true);
+    }
+
+    {
+        const result = self.startsWith(.sequence, "testz");
+        try expect(result == false);
+    }
+
+    {
+        const result = self.startsWith(.sequence, "is");
+        try expect(result == false);
+    }
+}
+
+test "startsWith(self, mode, needle)           : any" {
+    const self = Fluent.init("This is a testz");
+
+    {
+        const result = self.startsWith(.sequence, "This");
+        try expect(result == true);
+    }
+
+    {
+        const result = self.startsWith(.sequence, "testz");
+        try expect(result == false);
+    }
+
+    {
+        const result = self.startsWith(.sequence, "is");
+        try expect(result == false);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "endsWith(self, mode, needle)             : scalar" {
+    const self = Fluent.init("This is a testz");
+
+    {
+        const result = self.endsWith(.scalar, 'z');
+        try expect(result == true);
+    }
+
+    {
+        const result = self.endsWith(.scalar, 't');
+        try expect(result == false);
+    }
+
+    {
+        const result = self.endsWith(.scalar, 'T');
+        try expect(result == false);
+    }
+}
+
+test "endsWith(self, mode, needle)             : sequence" {
+    const self = Fluent.init("This is a testz");
+
+    {
+        const result = self.endsWith(.sequence, "testz");
+        try expect(result == true);
+    }
+
+    {
+        const result = self.endsWith(.sequence, "This");
+        try expect(result == false);
+    }
+
+    {
+        const result = self.endsWith(.sequence, "is");
+        try expect(result == false);
+    }
+}
+
+test "endsWith(self, mode, needle)             : any" {
+    const self = Fluent.init("This is a testz");
+
+    {
+        const result = self.endsWith(.sequence, "testz");
+        try expect(result == true);
+    }
+
+    {
+        const result = self.endsWith(.sequence, "this");
+        try expect(result == false);
+    }
+
+    {
+        const result = self.endsWith(.sequence, "is");
+        try expect(result == false);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "count(self, opt, mode, needle)           : scalar" {
+    const self = Fluent.init("000_111_000");
+
+    {
+        const result = self.count(.all, .scalar, '0');
+        try expect(result == 6);
+    }
+
+    {
+        const result = self.count(.leading, .scalar, '0');
+        try expect(result == 3);
+    }
+
+    {
+        const result = self.count(.trailing, .scalar, '0');
+        try expect(result == 3);
+    }
+
+    {
+        const result = self.count(.until, .scalar, '1');
+        try expect(result == 4);
+    }
+
+    {
+        const result = self.count(.both, .scalar, '0');
+        try expect(result == 6);
+    }
+
+    {
+        const result = self.count(.inside, .scalar, '0');
+        try expect(result == 0);
+    }
+
+    {
+        const result = self.count(.inverse, .scalar, '0');
+        try expect(result == self.items.len - 6);
+    }
+}
+
+test "count(self, opt, mode, needle)           : sequence" {
+    const self = Fluent.init("000_111_000");
+
+    {
+        const result = self.count(.all, .sequence, "000");
+        try expect(result == 2);
+    }
+
+    {
+        const result = self.count(.leading, .sequence, "000");
+        try expect(result == 1);
+    }
+
+    {
+        const result = self.count(.trailing, .sequence, "000");
+        try expect(result == 1);
+    }
+
+    {
+        const result = self.count(.until, .sequence, "000");
+        try expect(result == 0);
+    }
+
+    {
+        const result = self.count(.both, .sequence, "000");
+        try expect(result == 2);
+    }
+
+    {
+        const result = self.count(.inside, .sequence, "111");
+        try expect(result == 1);
+    }
+
+    {
+        const result = self.count(.inverse, .sequence, "000");
+        try expect(result == self.items.len - 2);
+    }
+}
+
+test "count(self, opt, mode, needle)           : any" {
+    const self = Fluent.init("000_111_000");
+
+    {
+        const result = self.count(.all, .any, "01_");
+        try expect(result == self.items.len);
+    }
+
+    // {
+    //     const result = self.count(.leading, .sequence, "000");
+    //     try expect(result == 1);
+    // }
+
+    // {
+    //     const result = self.count(.trailing, .sequence, "000");
+    //     try expect(result == 1);
+    // }
+
+    // {
+    //     const result = self.count(.until, .sequence, "000");
+    //     try expect(result == 0);
+    // }
+
+    // {
+    //     const result = self.count(.both, .sequence, "000");
+    //     try expect(result == 2);
+    // }
+
+    // {
+    //     const result = self.count(.inside, .sequence, "111");
+    //     try expect(result == 1);
+    // }
+
+    // {
+    //     const result = self.count(.inverse, .sequence, "000");
+    //     try expect(result == self.items.len - 2);
+    // }
+}
+
+////////////////////////
+// MUTABLE BACKEND    //
+////////////////////////
