@@ -1233,35 +1233,367 @@ test "count(self, opt, mode, needle)           : any" {
         try expect(result == self.items.len);
     }
 
-    // {
-    //     const result = self.count(.leading, .sequence, "000");
-    //     try expect(result == 1);
-    // }
+    {
+        const result = self.count(.leading, .any, "0_");
+        try expect(result == 4);
+    }
 
-    // {
-    //     const result = self.count(.trailing, .sequence, "000");
-    //     try expect(result == 1);
-    // }
+    {
+        const result = self.count(.trailing, .any, "0_");
+        try expect(result == 4);
+    }
 
-    // {
-    //     const result = self.count(.until, .sequence, "000");
-    //     try expect(result == 0);
-    // }
+    {
+        const result = self.count(.until, .any, "_111_");
+        try expect(result == 3);
+    }
 
-    // {
-    //     const result = self.count(.both, .sequence, "000");
-    //     try expect(result == 2);
-    // }
+    {
+        const result = self.count(.both, .any, "_0");
+        try expect(result == 8);
+    }
 
-    // {
-    //     const result = self.count(.inside, .sequence, "111");
-    //     try expect(result == 1);
-    // }
+    {
+        const result = self.count(.inside, .any, "1_");
+        try expect(result == 5);
+    }
 
-    // {
-    //     const result = self.count(.inverse, .sequence, "000");
-    //     try expect(result == self.items.len - 2);
-    // }
+    {
+        const result = self.count(.inverse, .any, "0_");
+        try expect(result == 3);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "slice(self, start, end)                  : [start..end]" {
+    const self = Fluent.init("000_111_000");
+
+    {
+        const result = self.slice(0, self.items.len);
+        try expect(std.mem.eql(u8, self.items, result.items));
+    }
+
+    {
+        const result = self.slice(0, 0);
+        try expect(std.mem.eql(u8, self.items, result.items));
+    }
+
+    {
+        const result = self.slice(self.items.len, 0);
+        try expect(std.mem.eql(u8, self.items, result.items));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "order(self, items)                       : Order" {
+    const self = Fluent.init(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
+
+    {
+        const result = self.order(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
+        try expect(result == .eq);
+    }
+
+    {
+        const result = self.order(&[_]i32{ 9, 2, 3, 4, 5, 6, 7, 8, 8 });
+        try expect(result == .lt);
+    }
+
+    {
+        const result = self.order(&[_]i32{ 0, 2, 3, 4, 5, 6, 7, 8, 8 });
+        try expect(result == .gt);
+    }
+
+    {
+        const result = self.order(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+        try expect(result == .lt);
+    }
+
+    {
+        const result = self.order(&[_]i32{ 0, 2, 3, 4, 5, 6, 7, 8, 7 });
+        try expect(result == .gt);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "equal(self, items)                       : bool" {
+    const self_num = Fluent.init(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
+    const self_str = Fluent.init("This is a string");
+
+    {
+        const result = self_num.equal(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
+        try expect(result == true);
+    }
+
+    {
+        const result = self_num.equal(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 0 });
+        try expect(result == false);
+    }
+
+    {
+        const result = self_str.equal("This is a string");
+        try expect(result == true);
+    }
+
+    {
+        const result = self_str.equal("This is a ZIG");
+        try expect(result == false);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "sum(self)                                : Self.DataType" {
+    const self = Fluent.init(try testing_allocator.alloc(i32, 10000));
+    defer testing_allocator.free(self.items);
+
+    {
+        const result = self.fill(2).sum();
+        try expect(result == 20000);
+    }
+
+    {
+        const result = self.fill(0).sum();
+        try expect(result == 0);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "product(self)                            : Self.DataType" {
+    const self = Fluent.init(try testing_allocator.alloc(i32, 16));
+    defer testing_allocator.free(self.items);
+
+    {
+        const result = self.fill(2).product();
+        try expect(result == 65_536);
+    }
+
+    {
+        const result = self.fill(1).product();
+        try expect(result == 1);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "min(self)                                : Self.DataType" {
+    const self = Fluent.init(try testing_allocator.alloc(i32, 1024));
+    defer testing_allocator.free(self.items);
+
+    {
+        const result = self.fill(2).min();
+        try expect(result == 2);
+    }
+
+    {
+        const temp = self.fill(100);
+        self.items[512] = -2147483648;
+        const result = temp.min();
+        try expect(result == -2147483648);
+    }
+
+    {
+        const temp = self.fill(100);
+        self.items[0] = 0;
+        const result = temp.min();
+        try expect(result == 0);
+    }
+
+    {
+        const temp = self.fill(100);
+        self.items[1023] = 0;
+        const result = temp.min();
+        try expect(result == 0);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "max(self)                                : Self.DataType" {
+    const self = Fluent.init(try testing_allocator.alloc(i32, 1024));
+    defer testing_allocator.free(self.items);
+
+    {
+        const result = self.fill(2).max();
+        try expect(result == 2);
+    }
+
+    {
+        const temp = self.fill(100);
+        self.items[512] = 2147483647;
+        const result = temp.max();
+        try expect(result == 2147483647);
+    }
+
+    {
+        const temp = self.fill(100);
+        self.items[0] = 999;
+        const result = temp.max();
+        try expect(result == 999);
+    }
+
+    {
+        const temp = self.fill(100);
+        self.items[1023] = 777;
+        const result = temp.max();
+        try expect(result == 777);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "split(self, mode, delimiter)             : SplitIterator" {
+    const self = Fluent.init("This is a string");
+    const expected = [_][]const u8{ "This", "is", "a", "string" };
+
+    {
+        var iter = self.split(.scalar, ' ');
+        for (expected) |item| {
+            const result = Fluent.init(iter.next() orelse unreachable);
+            try expect(result.equal(item));
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////
+// IMMUTABLE STRING BACKEND  //
+///////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "isDigit(self)                            : bool" {
+    const test_case = [_][]const u8{ "0", "0123456789", "oops!0123456789", "0123456789oops!" };
+    const expected = [_]bool{ true, true, false, false };
+
+    {
+        for (test_case, expected) |item, answer| {
+            const result = Fluent.init(item).isDigit();
+            try expect(result == answer);
+        }
+    }
+}
+
+test "isAlpha(self)                            : bool" {
+    const test_case = [_][]const u8{ "a", "aaaaaaaaaa", "7aaaaaaaaaaa", "aaaaaaaaaaa7" };
+    const expected = [_]bool{ true, true, false, false };
+
+    {
+        for (test_case, expected) |item, answer| {
+            const result = Fluent.init(item).isAlpha();
+            try expect(result == answer);
+        }
+    }
+}
+
+test "isSpaces(self)                           : bool" {
+    const test_case = [_][]const u8{ " ", "          ", "7           ", "           7" };
+    const expected = [_]bool{ true, true, false, false };
+
+    {
+        for (test_case, expected) |item, answer| {
+            const result = Fluent.init(item).isSpaces();
+            try expect(result == answer);
+        }
+    }
+}
+
+test "isLower(self)                            : bool" {
+    const test_case = [_][]const u8{ "a", "aaaaaaaaaa", "Aaaaaaaaaaa", "aaaaaaaaaaaA" };
+    const expected = [_]bool{ true, true, false, false };
+
+    {
+        for (test_case, expected) |item, answer| {
+            const result = Fluent.init(item).isLower();
+            try expect(result == answer);
+        }
+    }
+}
+
+test "isUpper(self)                            : bool" {
+    const test_case = [_][]const u8{ "A", "AAAAAAAAAA", "aAAAAAAAAAA", "AAAAAAAAAAAa" };
+    const expected = [_]bool{ true, true, false, false };
+
+    {
+        for (test_case, expected) |item, answer| {
+            const result = Fluent.init(item).isUpper();
+            try expect(result == answer);
+        }
+    }
+}
+
+test "isHex(self)                              : bool" {
+    const test_case = [_][]const u8{ "0", "0123456789ABCDEF", "0123456789abcdef", "0123456789abcdefZig" };
+    const expected = [_]bool{ true, true, true, false };
+
+    {
+        for (test_case, expected) |item, answer| {
+            const result = Fluent.init(item).isHex();
+            try expect(result == answer);
+        }
+    }
+}
+
+test "isASCII(self)                            : bool" {
+    const self = Fluent.init(try testing_allocator.alloc(u8, 255));
+    defer testing_allocator.free(self.items);
+    for (self.items, 0..255) |*item, i| item.* = @truncate(i);
+
+    {
+        const result = self.slice(0, 127).isASCII();
+        try expect(result == true);
+    }
+
+    {
+        const result = self.slice(0, 255).isASCII();
+        try expect(result == false);
+    }
+}
+
+test "isPrintable(self)                        : bool" {
+    const self = Fluent.init(try testing_allocator.alloc(u8, 255));
+    defer testing_allocator.free(self.items);
+    for (self.items, 0..255) |*item, i| item.* = @truncate(i);
+
+    {
+        const result = self.slice(32, 127).isPrintable();
+        try expect(result == true);
+    }
+
+    {
+        const result = self.slice(0, 255).isPrintable();
+        try expect(result == false);
+    }
+}
+
+test "isAlnum(self)                            : bool" {
+    const self = Fluent.init(try testing_allocator.alloc(u8, 255));
+    defer testing_allocator.free(self.items);
+    for (self.items, 0..255) |*item, i| item.* = @truncate(i);
+
+    {
+        const result = self.slice('A', 'Z').isAlnum();
+        try expect(result == true);
+    }
+
+    {
+        const result = self.slice('0', '9').isAlnum();
+        try expect(result == true);
+    }
+
+    {
+        const result = self.slice('a', 'z').isAlnum();
+        try expect(result == true);
+    }
+
+    {
+        const result = self.slice(0, 255).isAlnum();
+        try expect(result == false);
+    }
 }
 
 ////////////////////////
