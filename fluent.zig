@@ -8,7 +8,7 @@ const math = std.math;
 // Public Access Point                                                       ///
 ////////////////////////////////////////////////////////////////////////////////
 
-const Fluent = @This();
+pub const Fluent = @This();
 pub const FluentMode = std.mem.DelimiterType;
 pub const FluentOption = enum { left, leading, right, trailing, both, all, around, inside, until, stable, unstable, ascending, descending, inverse };
 
@@ -339,9 +339,9 @@ fn MutableBackend(comptime Self: type) type {
         // includes operations like reduce, find, and iterators
         pub usingnamespace ImmutableBackend(Self);
 
-        pub fn sort(self: Self, comptime mode: enum { asc, desc }) Self {
+        pub fn sort(self: Self, comptime opt: FluentOption) Self {
             const SF = SortFunction(Self.DataType);
-            const func = if (mode == .asc) SF.lessThan else SF.greaterThan;
+            const func = if (opt == .ascending) SF.lessThan else SF.greaterThan;
             std.sort.block(Self.DataType, self.items, void{}, func);
             return self;
         }
@@ -356,14 +356,8 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
-        pub fn swap(self: Self, idx1: usize, idx2: usize) void {
-            const temp = self.items[wrapIndex(self.items.len, idx1)];
-            self.items[wrapIndex(self.items.len, idx1)] = self.items[wrapIndex(self.items.len, idx2)];
-            self.items[wrapIndex(self.items.len, idx2)] = temp;
-        }
-
         pub fn concat(self: Self, items: []const Self.DataType, concat_buffer: []Self.DataType) Self {
-            std.debug.assert(self.items.len + items.len <= concat_buffer.len);
+            // std.debug.assert(self.items.len + items.len <= concat_buffer.len);
             var concat_index: usize = self.items.len;
             @memcpy(concat_buffer[0..self.items.len], self.items);
             @memcpy(concat_buffer[concat_index..][0..items.len], items);
@@ -384,10 +378,11 @@ fn MutableBackend(comptime Self: type) type {
             return .{ .items = join_buffer[0..curr_idx] };
         }
 
-        pub fn partion(self: Self, predicate: fn (Self.DataType) bool, opt: enum { stable, unstable }) Self {
+        pub fn partion(self: Self, opt: FluentOption, predicate: fn (Self.DataType) bool) Self {
             switch (opt) {
                 .stable => stablePartition(Self.DataType, self, predicate),
                 .unstable => unstablePartition(Self.DataType, self, predicate),
+                else => {},
             }
             return (self);
         }
@@ -434,6 +429,12 @@ fn MutableBackend(comptime Self: type) type {
         ///////////////////////
         //  PRIVATE SECTION  //
         ///////////////////////
+
+        fn swap(self: Self, idx1: usize, idx2: usize) void {
+            const temp = self.items[wrapIndex(self.items.len, idx1)];
+            self.items[wrapIndex(self.items.len, idx1)] = self.items[wrapIndex(self.items.len, idx2)];
+            self.items[wrapIndex(self.items.len, idx2)] = temp;
+        }
 
         fn trimIf(self: Self, comptime direction: FluentOption, predicate: fn (Self.DataType) bool) Self {
             if (self.items.len <= 1) return self;
@@ -1478,6 +1479,8 @@ test "isDigit(self)                            : bool" {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 test "isAlpha(self)                            : bool" {
     const test_case = [_][]const u8{ "a", "aaaaaaaaaa", "7aaaaaaaaaaa", "aaaaaaaaaaa7" };
     const expected = [_]bool{ true, true, false, false };
@@ -1489,6 +1492,8 @@ test "isAlpha(self)                            : bool" {
         }
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 test "isSpaces(self)                           : bool" {
     const test_case = [_][]const u8{ " ", "          ", "7           ", "           7" };
@@ -1502,6 +1507,8 @@ test "isSpaces(self)                           : bool" {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 test "isLower(self)                            : bool" {
     const test_case = [_][]const u8{ "a", "aaaaaaaaaa", "Aaaaaaaaaaa", "aaaaaaaaaaaA" };
     const expected = [_]bool{ true, true, false, false };
@@ -1513,6 +1520,8 @@ test "isLower(self)                            : bool" {
         }
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 test "isUpper(self)                            : bool" {
     const test_case = [_][]const u8{ "A", "AAAAAAAAAA", "aAAAAAAAAAA", "AAAAAAAAAAAa" };
@@ -1526,6 +1535,8 @@ test "isUpper(self)                            : bool" {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 test "isHex(self)                              : bool" {
     const test_case = [_][]const u8{ "0", "0123456789ABCDEF", "0123456789abcdef", "0123456789abcdefZig" };
     const expected = [_]bool{ true, true, true, false };
@@ -1537,6 +1548,8 @@ test "isHex(self)                              : bool" {
         }
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 test "isASCII(self)                            : bool" {
     const self = Fluent.init(try testing_allocator.alloc(u8, 255));
@@ -1554,6 +1567,8 @@ test "isASCII(self)                            : bool" {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 test "isPrintable(self)                        : bool" {
     const self = Fluent.init(try testing_allocator.alloc(u8, 255));
     defer testing_allocator.free(self.items);
@@ -1569,6 +1584,8 @@ test "isPrintable(self)                        : bool" {
         try expect(result == false);
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 test "isAlnum(self)                            : bool" {
     const self = Fluent.init(try testing_allocator.alloc(u8, 255));
@@ -1596,6 +1613,143 @@ test "isAlnum(self)                            : bool" {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 ////////////////////////
 // MUTABLE BACKEND    //
 ////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "sort(self, opt)                          : MutSelf" {
+    const test_case = [_][]const i32{
+        &[_]i32{ 6, 5, 4, 3, 2, 1 },
+        &[_]i32{ 1, 2, 3, 6, 5, 4 },
+        &[_]i32{ 1, 2, 3, 4, 5, 6 },
+        &[_]i32{ 6, 5, 4, 1, 2, 3 },
+        &[_]i32{ 1, 2, 3, 4, 5, 6 },
+    };
+    const expected = [_][]const i32{
+        &[_]i32{ 1, 2, 3, 4, 5, 6 },
+        &[_]i32{ 1, 2, 3, 4, 5, 6 },
+        &[_]i32{ 1, 2, 3, 4, 5, 6 },
+        &[_]i32{ 6, 5, 4, 3, 2, 1 },
+        &[_]i32{ 6, 5, 4, 3, 2, 1 },
+    };
+
+    const sorting_order = [_]FluentOption{
+        .ascending,
+        .ascending,
+        .ascending,
+        .descending,
+        .descending,
+    };
+
+    var buffer: [6]i32 = undefined;
+    {
+        // I love Zig <3
+        inline for (expected, sorting_order, test_case) |answer, order, case| {
+            const result = Fluent.init(buffer[0..])
+                .copy(case)
+                .sort(order);
+            try expect(result.equal(answer) == true);
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "fill(self, scalar)                       : MutSelf" {
+    var buffer: [32]u8 = undefined;
+
+    {
+        const result = Fluent.init(buffer[0..])
+            .fill('1')
+            .count(.all, .scalar, '1');
+        try expect(result == 32);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "copy(self, scalar)                       : MutSelf" {
+    var buffer: [32]u8 = undefined;
+
+    {
+        const result = Fluent.init(buffer[0..])
+            .copy("00001111222244445555666677778888");
+        try expect(result.equal("00001111222244445555666677778888"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "concat(self, items, concat_buffer)       : MutSelf" {
+    const start = "This";
+    const expected = "This is a string";
+    var start_buffer: [4]u8 = undefined;
+    var concat_buffer: [16]u8 = undefined;
+
+    {
+        const result = Fluent.init(start_buffer[0..start.len])
+            .copy(start[0..])
+            .concat(" is a string", concat_buffer[0..]);
+        try expect(result.equal(expected));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "join(self, collection, join_buffer)      : MutSelf" {
+    const collection = &[_][]const u8{
+        "11",
+        "222",
+        "3333",
+        "44444",
+    };
+
+    var start_buffer: [1]u8 = undefined;
+    var join_buffer: [15]u8 = undefined;
+
+    {
+        const result = Fluent.init(start_buffer[0..])
+            .copy("0")
+            .join(collection, join_buffer[0..]);
+        try expect(result.equal("011222333344444") == true);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+fn isOne(x: u8) bool {
+    return (x == '1');
+}
+
+test "partition(self, opt, predicate)          : MutSelf" {
+    const test_case = &[_][]const u8{
+        "01010101", "a1b2c3d4",
+        "1 1 1 1 ", "aAbBcCdD",
+    };
+
+    const predicators = [_]fn (u8) bool{
+        isOne,                  std.ascii.isDigit,
+        std.ascii.isWhitespace, std.ascii.isUpper,
+    };
+
+    const expected = &[_][]const u8{
+        "11110000", "1234abcd",
+        "    1111", "ABCDabcd",
+    };
+
+    var buffer: [8]u8 = undefined;
+    inline for (expected, test_case, predicators) |answer, case, predicate| {
+        const result = Fluent.init(buffer[0..])
+            .copy(case)
+            .partion(.stable, predicate);
+        try expect(result.equal(answer));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "trim(self, opt, mode, to_trim)           : scalar" {}
