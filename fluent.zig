@@ -11,6 +11,12 @@ const math = std.math;
 pub const Fluent = @This();
 pub const FluentMode = std.mem.DelimiterType;
 pub const FluentOption = enum { left, leading, right, trailing, both, all, around, inside, until, stable, unstable, ascending, descending, inverse };
+pub const FluentActor = enum {
+    scalar,
+    predicate,
+    range,
+    set,
+};
 
 pub fn init(slice: anytype) FluentInterface(DeepChild(@TypeOf(slice)), isConst(@TypeOf(slice))) {
     return .{ .items = slice };
@@ -213,6 +219,14 @@ fn ImmutableBackend(comptime Self: type) type {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
         }
 
+        pub fn window(
+            self: Self,
+            size: usize,
+            advance: usize,
+        ) std.mem.WindowIterator(Self.DataType) {
+            return std.mem.window(Self.DataType, self.items, size, advance);
+        }
+
         ///////////////////////
         //  PRIVATE SECTION  //
         ///////////////////////
@@ -251,8 +265,8 @@ fn ImmutableBackend(comptime Self: type) type {
                     }
                 },
                 .sequence => {
-                    var window = std.mem.window(Self.DataType, self.items, needle.len, needle.len);
-                    while (window.next()) |win| : (result += 1) {
+                    var win_iter = std.mem.window(Self.DataType, self.items, needle.len, needle.len);
+                    while (win_iter.next()) |win| : (result += 1) {
                         if (std.mem.eql(Self.DataType, win, needle) == false) break;
                     }
                 },
@@ -276,8 +290,8 @@ fn ImmutableBackend(comptime Self: type) type {
                 },
                 .sequence => {
                     if (self.items.len < needle.len) return (0);
-                    var window = std.mem.window(Self.DataType, self.items, needle.len, needle.len);
-                    while (window.next()) |win| : (result += 1) {
+                    var win_iter = std.mem.window(Self.DataType, self.items, needle.len, needle.len);
+                    while (win_iter.next()) |win| : (result += 1) {
                         if (std.mem.eql(Self.DataType, win, needle) == true) break;
                     }
                 },
@@ -304,8 +318,8 @@ fn ImmutableBackend(comptime Self: type) type {
                     if (self.items.len < needle.len) return 0;
                     var start = self.items.len - needle.len;
                     while (start != 0) : (start -|= needle.len) {
-                        const window = self.items[start .. start + needle.len];
-                        if (std.mem.eql(Self.DataType, window, needle) == false) break;
+                        const win = self.items[start .. start + needle.len];
+                        if (std.mem.eql(Self.DataType, win, needle) == false) break;
                         result += 1;
                     }
                 },
@@ -387,18 +401,11 @@ fn MutableBackend(comptime Self: type) type {
             return (self);
         }
 
-        pub fn trim(self: Self, comptime direction: FluentOption, comptime mode: FluentMode, to_trim: FluentType(Self.DataType, mode)) Self {
-            return switch (mode) {
-                .any => .{
-                    .items = switch (direction) {
-                        .left => std.mem.trimLeft(Self.DataType, self.items, to_trim),
-                        .right => std.mem.trimRight(Self.DataType, self.items, to_trim),
-                        .both => std.mem.trim(Self.DataType, self.items, to_trim),
-                    },
-                },
-                .predicate => trimIf(self, direction, to_trim),
-                .scalar => trimScalar(self, direction, to_trim),
-            };
+        pub fn trim(self: Self, comptime opt: FluentOption, comptime kind: FluentActor, actor: FluentActorKind(Self.DataType, kind)) Self {
+            if (self.items.len <= 1) return self;
+            const start: usize = if (opt == .left or opt == .both) trimLeft(self, kind, actor) else 0;
+            const end: usize = if (opt == .right or opt == .both) trimRight(self, kind, actor) else self.items.len;
+            return .{ .items = self.items[start..end] };
         }
 
         pub fn rotate(self: Self, amount: anytype) Self {
@@ -436,32 +443,42 @@ fn MutableBackend(comptime Self: type) type {
             self.items[wrapIndex(self.items.len, idx2)] = temp;
         }
 
-        fn trimIf(self: Self, comptime direction: FluentOption, predicate: fn (Self.DataType) bool) Self {
-            if (self.items.len <= 1) return self;
+        fn trimLeft(self: Self, comptime kind: FluentActor, actor: FluentActorKind(Self.DataType, kind)) usize {
+            if (self.items.len <= 1) return 0;
             var start: usize = 0;
-            var end: usize = self.items.len;
-
-            if (direction == .left or direction == .both) {
-                while (start < end and predicate(self.items[start])) start += 1;
+            const end: usize = self.items.len;
+            switch (kind) {
+                .scalar => {
+                    while (start < end and self.items[start] == actor) start += 1;
+                },
+                .predicate => {
+                    while (start < end and actor(self.items[start])) start += 1;
+                },
+                .set => {
+                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[start]) != null) start += 1;
+                },
+                else => {},
             }
-            if (direction == .right or direction == .both) {
-                while (end > start and predicate(self.items[end - 1])) end -= 1;
-            }
-            return self.slice(start, end);
+            return start;
         }
 
-        fn trimScalar(self: Self, comptime direction: FluentOption, value: Self.DataType) Self {
-            if (self.items.len <= 1) return self;
-            var start: usize = 0;
+        fn trimRight(self: Self, comptime act: FluentActor, actor: FluentActorKind(Self.DataType, act)) usize {
+            if (self.items.len <= 1) return 0;
+            const start: usize = 0;
             var end: usize = self.items.len;
-
-            if (direction == .left or direction == .both) {
-                while (start < end and self.items[start] == value) start += 1;
+            switch (act) {
+                .scalar => {
+                    while (end > start and self.items[end - 1] == actor) end -= 1;
+                },
+                .predicate => {
+                    while (end > start and actor(self.items[end - 1])) end -= 1;
+                },
+                .set => {
+                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[end - 1]) != null) end -= 1;
+                },
+                else => {},
             }
-            if (direction == .right or direction == .both) {
-                while (end > start and self.items[end - 1] == value) end -= 1;
-            }
-            return self.slice(start, end);
+            return end;
         }
 
         fn stablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
@@ -651,6 +668,15 @@ fn FluentType(comptime T: type, comptime mode: FluentMode) type {
     return switch (mode) {
         .sequence, .any => []const T,
         .scalar => T,
+    };
+}
+
+fn FluentActorKind(comptime T: type, comptime kind: FluentActor) type {
+    return switch (kind) {
+        .scalar => return T,
+        .predicate => fn (T) bool,
+        .range => struct { start: usize, end: usize },
+        .set => return []const T,
     };
 }
 
@@ -1752,4 +1778,87 @@ test "partition(self, opt, predicate)          : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "trim(self, opt, mode, to_trim)           : scalar" {}
+test "trim(self, opt, kind, actor)             : scalar" {
+    const source = "     This is a string     ";
+    var buffer: [source.len]u8 = undefined;
+
+    {
+        const result = Fluent.init(buffer[0..source.len])
+            .copy(source)
+            .trim(.left, .scalar, ' ');
+        try expect(result.equal(source[5..]));
+    }
+
+    {
+        const result = Fluent.init(buffer[0..source.len])
+            .copy(source)
+            .trim(.right, .scalar, ' ');
+        try expect(result.equal(source[0 .. source.len - 5]));
+    }
+
+    {
+        const result = Fluent.init(buffer[0..source.len])
+            .copy(source)
+            .trim(.both, .scalar, ' ');
+        try expect(result.equal(source[5 .. source.len - 5]));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "trim(self, opt, kind, actor)             : predicate" {
+    const source = "     This is a string     ";
+    var buffer: [source.len]u8 = undefined;
+
+    {
+        const result = Fluent.init(buffer[0..source.len])
+            .copy(source)
+            .trim(.left, .predicate, std.ascii.isWhitespace);
+        try expect(result.equal(source[5..]));
+    }
+
+    {
+        const result = Fluent.init(buffer[0..source.len])
+            .copy(source)
+            .trim(.right, .predicate, std.ascii.isWhitespace);
+        try expect(result.equal(source[0 .. source.len - 5]));
+    }
+
+    {
+        const result = Fluent.init(buffer[0..source.len])
+            .copy(source)
+            .trim(.both, .predicate, std.ascii.isWhitespace);
+        try expect(result.equal(source[5 .. source.len - 5]));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "trim(self, opt, kind, actor)             : set" {
+    const source = "     This is a string     ";
+    const set = " \n\t";
+    var buffer: [source.len]u8 = undefined;
+
+    {
+        const result = Fluent.init(buffer[0..source.len])
+            .copy(source)
+            .trim(.left, .set, set[0..]);
+        try expect(result.equal(source[5..]));
+    }
+
+    {
+        const result = Fluent.init(buffer[0..source.len])
+            .copy(source)
+            .trim(.right, .set, set[0..]);
+        try expect(result.equal(source[0 .. source.len - 5]));
+    }
+
+    {
+        const result = Fluent.init(buffer[0..source.len])
+            .copy(source)
+            .trim(.both, .set, set[0..]);
+        try expect(result.equal(source[5 .. source.len - 5]));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
