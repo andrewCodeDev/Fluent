@@ -58,7 +58,7 @@ Mutable:
   lower       - transform all alphabetic characters to lower case
   upper       - transform all alphabetic characters to upper case
   capitalize  - transform first character to upper case and rest to lower case
-  title       - capitalize sequence separated by spaces
+  title       - capitalize each sequence separated by spaces
 
 ```
 ### Iterator Support:
