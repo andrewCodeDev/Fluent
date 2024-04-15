@@ -52,7 +52,6 @@ fn DefaultArg(comptime T: type) T {
 
 pub fn adapt(
     comptime argument_type: type,
-    comptime bind_tuple: anytype,
     comptime function: anytype,
 ) fn (argument_type) @TypeOf(function(DefaultArg(argument_type))) {
 
@@ -61,7 +60,7 @@ pub fn adapt(
     return struct {
 
         pub fn call(x: argument_type) return_type {
-            return @call(.always_inline, function, bind_tuple ++ .{ x });
+            return @call(.always_inline, function, .{ x });
         }
 
     }.call;
