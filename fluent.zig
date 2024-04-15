@@ -861,7 +861,13 @@ fn isUnsigned(comptime T: type) bool {
 }
 
 fn Parameter(comptime T: type, comptime mode: anytype) type {
-    const param_types = std.ComptimeStringMap(type, .{ .{ "any", []const T }, .{ "scalar", T }, .{ "sequence", []const T }, .{ "range", struct { start: usize, end: usize } }, .{ "predicate", fn (T) bool } });
+    const param_types = std.ComptimeStringMap(type, .{
+        .{ "any", []const T },
+        .{ "scalar", T },
+        .{ "sequence", []const T },
+        .{ "range", struct { start: usize, end: usize } },
+        .{ "predicate", fn (T) bool },
+    });
     return comptime param_types.get(@tagName(mode)) orelse unreachable;
 }
 
