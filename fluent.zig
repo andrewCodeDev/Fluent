@@ -577,9 +577,9 @@ fn MutableBackend(comptime Self: type) type {
                 },
                 .sequence => {
                     std.debug.assert(this.len == with.len);
-                    var win_iter = self.window(this.len, this.len);
+                    var win_iter = self.window(this.len, 1);
                     var offset: usize = 0;
-                    while (win_iter.next()) |win| : (offset += win.len) {
+                    while (win_iter.next()) |win| : (offset += 1) {
                         if (std.mem.eql(Self.DataType, win, this) == false)
                             continue;
                         return replaceRange(self, offset, offset + with.len, mode, with);
@@ -615,7 +615,7 @@ fn MutableBackend(comptime Self: type) type {
                 .sequence => {
                     std.debug.assert(this.len == with.len);
                     var start = self.items.len - this.len;
-                    while (start != 0) : (start -|= this.len) {
+                    while (start != 0) : (start -|= 1) {
                         const win = self.items[start .. start + this.len];
                         if (std.mem.eql(Self.DataType, win, this) == false)
                             continue;
@@ -643,9 +643,9 @@ fn MutableBackend(comptime Self: type) type {
                 .scalar => std.mem.replaceScalar(Self.DataType, self.items, this, with),
                 .sequence => {
                     std.debug.assert(this.len == with.len);
-                    var win_iter = self.window(this.len, this.len);
+                    var win_iter = self.window(this.len, 1);
                     var offset: usize = 0;
-                    while (win_iter.next()) |win| : (offset += win.len) {
+                    while (win_iter.next()) |win| : (offset += 1) {
                         if (std.mem.eql(Self.DataType, win, this))
                             _ = replaceRange(self, offset, offset + with.len, mode, with);
                     }
