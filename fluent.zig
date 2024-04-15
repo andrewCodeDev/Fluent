@@ -372,7 +372,7 @@ fn ImmutableBackend(comptime Self: type) type {
             if (size == self.items.len)
                 return self.items;
 
-            const start = random.intRangeLessThan(usize, 0, self.items.len - size);
+            const start = random.intRangeAtMost(usize, 0, self.items.len - size);
 
             return self.items[start..][0..size];
         }
@@ -726,7 +726,7 @@ const SampleOption = enum {
 // any, sequence, scalar
 pub const FluentMode = std.mem.DelimiterType;
 
-////////////////////////////////////////////////////////////////////////////////
+////////////////////AtMost////////////////////////////////////////////////////
 // PRIVATE HELPERS :                                                          //
 ////////////////////////////////////////////////////////////////////////////////
 
