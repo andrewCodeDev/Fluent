@@ -83,6 +83,14 @@ fn ImmutableBackend(comptime Self: type) type {
         //  PUBLIC SECTION   //
         ///////////////////////
 
+        pub fn all(self: Self, predicate: fn (Self.DataType) bool) bool {
+            return for (self.items) |x| { if (!predicate(x)) break false; } else true;            
+        }
+
+        pub fn none(self: Self, predicate: fn (Self.DataType) bool) bool {
+            return for (self.items) |x| { if (predicate(x)) break false; } else true;
+        }
+
         pub fn findFrom(
             self: Self,
             comptime mode: FluentMode,
@@ -702,39 +710,53 @@ fn ImmutableStringBackend(comptime Self: type) type {
         ///////////////////////
 
         pub fn isDigit(self: Self) bool {
-            return all(self, std.ascii.isDigit);
+            return self.all(std.ascii.isDigit);
         }
 
         pub fn isAlpha(self: Self) bool {
-            return all(self, std.ascii.isAlphabetic);
+            return self.all(std.ascii.isAlphabetic);
         }
 
         pub fn isSpaces(self: Self) bool {
-            return all(self, std.ascii.isWhitespace);
+            return self.all(std.ascii.isWhitespace);
         }
 
         pub fn isLower(self: Self) bool {
-            return all(self, std.ascii.isLower);
+            return self.all(std.ascii.isLower);
         }
 
         pub fn isUpper(self: Self) bool {
-            return all(self, std.ascii.isUpper);
+            return self.all(std.ascii.isUpper);
         }
 
         pub fn isHex(self: Self) bool {
-            return all(self, std.ascii.isHex);
+            return self.all(std.ascii.isHex);
         }
 
         pub fn isASCII(self: Self) bool {
-            return all(self, std.ascii.isASCII);
+            return self.all(std.ascii.isASCII);
         }
 
         pub fn isPrintable(self: Self) bool {
-            return all(self, std.ascii.isPrint);
+            return self.all(std.ascii.isPrint);
         }
 
         pub fn isAlnum(self: Self) bool {
-            return all(self, std.ascii.isAlphanumeric);
+            return self.all(std.ascii.isAlphanumeric);
+        }
+
+        pub fn digit(self: Self, comptime T: type) ?T {
+            if (comptime !isInteger(T))
+                @compileError("digit: requires integer type.");
+            
+            return std.fmt.parseInt(T, self.items, 10) catch null;
+        }
+
+        pub fn float(self: Self, comptime T: type) ?T {
+            if (comptime !isFloat(T))
+                @compileError("float: requires floating-point type.");
+            
+            return std.fmt.parseFloat(T, self.items) catch null;
         }
 
         ///////////////////////
@@ -856,7 +878,7 @@ const SampleOption = enum {
 // any, sequence, scalar
 pub const FluentMode = std.mem.DelimiterType;
 
-////////////////////AtMost////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // PRIVATE HELPERS :                                                          //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -879,9 +901,21 @@ fn isConst(comptime T: type) bool {
 }
 
 fn isUnsigned(comptime T: type) bool {
-    return switch (@typeInfo(@TypeOf(T))) {
-        .Int => |i| return i.signedness == .unsigned,
+    return switch (@typeInfo(T)) {
+        .Int => |i| i.signedness == .unsigned,
         else => false,
+    };
+}
+
+fn isInteger(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .Int => true, else => false,
+    };
+}
+
+fn isFloat(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .Float => true, else => false,
     };
 }
 
@@ -907,13 +941,6 @@ fn DeepChild(comptime T: type) type {
         .Array => |a| a.child,
         else => @compileError("Unsupported Type"),
     };
-}
-
-inline fn all(self: anytype, predicate: anytype) bool {
-    for (self.items) |x| {
-        if (!predicate(x)) return false;
-    }
-    return true;
 }
 
 inline fn wrapRange(len: usize, start: usize, end: usize) struct { start: usize, end: usize } {
@@ -2339,3 +2366,26 @@ test "title(self)                              : MutSelf" {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+test "string integer and float parsing        : ConstSelf" {
+    {
+        const result = init("42").digit(usize) orelse unreachable;
+        try expect(result == 42);
+    }
+
+    {
+        const result = init("4Zed").digit(usize);
+        try expect(result == null);
+    }
+
+    {
+        const result = init("42.5").float(f64) orelse unreachable;
+        try expect(result < 43.0);
+    }
+
+    {
+        const result = init("9.009.00").float(f64);
+        try expect(result == null);
+    }
+}
