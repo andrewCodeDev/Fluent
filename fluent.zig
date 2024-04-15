@@ -244,6 +244,13 @@ fn ImmutableBackend(comptime Self: type) type {
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
+        pub fn filter(
+            self: Self,
+            comptime predicate: fn (Self.DataType) bool,
+        ) FilterIterator(Self.DataType, predicate) {
+            return .{ .index = 0, .buffer = self.items };
+        }
+
         pub fn split(
             self: Self,
             comptime mode: std.mem.DelimiterType,
@@ -1028,6 +1035,31 @@ inline fn addGeneric(x: anytype, y: anytype) @TypeOf(x) {
 }
 inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x) {
     return x * y;
+}
+
+fn FilterIterator(
+    comptime T: type,
+    comptime predicate: fn(T) bool
+) type {
+
+    return struct {
+
+        buffer: []const T,
+        index: usize,
+
+        pub fn next(self: *@This()) ?T {
+            // advance to find the next qualifying element
+            while (self.index < self.buffer.len and !predicate(self.buffer[self.index])) {
+                self.index += 1;
+            }
+            // return qualifying element if in range
+            if (self.index < self.buffer.len) {
+                defer self.index += 1;
+                return self.buffer[self.index];
+            }
+            return null;
+        }
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2388,4 +2420,20 @@ test "string integer and float parsing        : ConstSelf" {
         const result = init("9.009.00").float(f64);
         try expect(result == null);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "filter                                  : ConstSelf" {
+    const x = init("1ab2cd3hx45");
+    var buffer: [32]u8 = undefined; 
+
+    var pos: usize = 0;
+    var itr = x.filter(std.ascii.isDigit);
+
+    while (itr.next()) |d| : (pos += 1) {
+        buffer[pos] = d;
+    }
+
+    try expect(std.mem.eql(u8, buffer[0..pos], "12345"));
 }

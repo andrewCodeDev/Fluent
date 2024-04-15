@@ -59,3 +59,11 @@ Mutable:
   title       - transform capitalize each word separated by spaces
 
 ```
+### Iterator Support:
+
+```
+  filter     - only return elements where predicate is true
+  split      - splits a sequence on a given delimiter
+  tokenize   - tokenizes a sequence on a given delimiter  
+  window     - chunks a sequence in a given window size
+```
