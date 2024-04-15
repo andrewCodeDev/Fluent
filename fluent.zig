@@ -463,16 +463,6 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
-        pub fn replaceRange(self: Self, start: usize, end: usize, comptime mode: FluentMode, with: Parameter(Self.DataType, mode)) Self {
-            return switch (mode) {
-                .scalar => self.setAt(start, with),
-                .sequence, .any => blk: {
-                    @memcpy(self.items[start..end], with);
-                    break :blk .{ .items = self.items[0..] };
-                },
-            };
-        }
-
         pub fn replace(self: Self, opt: ReplaceOption, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
             if (self.items.len == 0) return self;
             if (opt == .all) return replaceAll(self, mode, this, with);
@@ -481,6 +471,101 @@ fn MutableBackend(comptime Self: type) type {
             if (opt == .last or opt == .both)
                 _ = replaceLast(self, mode, this, with);
             return .{ .items = self.items[0..] };
+        }
+
+        pub fn map(self: Self, f: fn (Self.DataType) Self.DataType) Self {
+            for (self.items) |*x| x.* = @call(.always_inline, f, .{x.*});
+            return self;
+        }
+
+        ///////////////////////
+        //  PRIVATE SECTION  //
+        ///////////////////////
+
+        fn swap(self: Self, idx1: usize, idx2: usize) void {
+            const temp = self.items[wrapIndex(self.items.len, idx1)];
+            self.items[wrapIndex(self.items.len, idx1)] = self.items[wrapIndex(self.items.len, idx2)];
+            self.items[wrapIndex(self.items.len, idx2)] = temp;
+        }
+
+        fn trimLeft(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
+            if (self.items.len <= 1) return 0;
+            var start: usize = 0;
+            const end: usize = self.items.len;
+            switch (opt) {
+                .scalar => {
+                    while (start < end and self.items[start] == actor) start += 1;
+                },
+                .predicate => {
+                    while (start < end and actor(self.items[start])) start += 1;
+                },
+                .any => {
+                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[start]) != null) start += 1;
+                },
+            }
+            return start;
+        }
+
+        fn trimRight(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
+            if (self.items.len <= 1) return 0;
+            const start: usize = 0;
+            var end: usize = self.items.len;
+            switch (opt) {
+                .scalar => {
+                    while (end > start and self.items[end - 1] == actor) end -= 1;
+                },
+                .predicate => {
+                    while (end > start and actor(self.items[end - 1])) end -= 1;
+                },
+                .any => {
+                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[end - 1]) != null) end -= 1;
+                },
+            }
+            return end;
+        }
+
+        fn stablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
+            if (self.items.len < 2)
+                return;
+            var i: usize = 1;
+            while (i < self.items.len) : (i += 1) {
+                var j: usize = i;
+                while (j >= 1 and !predicate(self.items[j - 1]) and predicate(self.items[j])) : (j -= 1) {
+                    self.swap(j - 1, j);
+                }
+            }
+        }
+
+        fn unstablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
+            if (self.items.len < 2)
+                return;
+
+            var i: usize = 0;
+            var j: usize = self.items.len - 1;
+
+            while (true) : ({
+                i += 1;
+                j -= 1;
+            }) {
+                while (i < j and predicate(self.items[i]))
+                    i += 1;
+
+                while (i < j and !predicate(self.items[j]))
+                    j -= 1;
+
+                if (i >= j) return;
+
+                std.mem.swap(T, &self.items[i], &self.items[j]);
+            }
+        }
+        fn replaceRange(self: Self, start: usize, end: usize, comptime mode: FluentMode, with: Parameter(Self.DataType, mode)) Self {
+            return switch (mode) {
+                .scalar => self.setAt(start, with),
+                .sequence, .any => blk: {
+                    @memcpy(self.items[start..end], with);
+                    break :blk .{ .items = self.items[0..] };
+                },
+            };
         }
 
         fn replaceFirst(self: Self, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
@@ -579,92 +664,6 @@ fn MutableBackend(comptime Self: type) type {
                 },
             }
             return self;
-        }
-
-        pub fn map(self: Self, f: fn (Self.DataType) Self.DataType) Self {
-            for (self.items) |*x| x.* = @call(.always_inline, f, .{x.*});
-            return self;
-        }
-
-        ///////////////////////
-        //  PRIVATE SECTION  //
-        ///////////////////////
-
-        fn swap(self: Self, idx1: usize, idx2: usize) void {
-            const temp = self.items[wrapIndex(self.items.len, idx1)];
-            self.items[wrapIndex(self.items.len, idx1)] = self.items[wrapIndex(self.items.len, idx2)];
-            self.items[wrapIndex(self.items.len, idx2)] = temp;
-        }
-
-        fn trimLeft(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
-            if (self.items.len <= 1) return 0;
-            var start: usize = 0;
-            const end: usize = self.items.len;
-            switch (opt) {
-                .scalar => {
-                    while (start < end and self.items[start] == actor) start += 1;
-                },
-                .predicate => {
-                    while (start < end and actor(self.items[start])) start += 1;
-                },
-                .any => {
-                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[start]) != null) start += 1;
-                },
-            }
-            return start;
-        }
-
-        fn trimRight(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
-            if (self.items.len <= 1) return 0;
-            const start: usize = 0;
-            var end: usize = self.items.len;
-            switch (opt) {
-                .scalar => {
-                    while (end > start and self.items[end - 1] == actor) end -= 1;
-                },
-                .predicate => {
-                    while (end > start and actor(self.items[end - 1])) end -= 1;
-                },
-                .any => {
-                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[end - 1]) != null) end -= 1;
-                },
-            }
-            return end;
-        }
-
-        fn stablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
-            if (self.items.len < 2)
-                return;
-            var i: usize = 1;
-            while (i < self.items.len) : (i += 1) {
-                var j: usize = i;
-                while (j >= 1 and !predicate(self.items[j - 1]) and predicate(self.items[j])) : (j -= 1) {
-                    self.swap(j - 1, j);
-                }
-            }
-        }
-
-        fn unstablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
-            if (self.items.len < 2)
-                return;
-
-            var i: usize = 0;
-            var j: usize = self.items.len - 1;
-
-            while (true) : ({
-                i += 1;
-                j -= 1;
-            }) {
-                while (i < j and predicate(self.items[i]))
-                    i += 1;
-
-                while (i < j and !predicate(self.items[j]))
-                    j -= 1;
-
-                if (i >= j) return;
-
-                std.mem.swap(T, &self.items[i], &self.items[j]);
-            }
         }
     };
 }
