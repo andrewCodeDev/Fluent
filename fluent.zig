@@ -43,7 +43,7 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
 
 // Used to determine what the return type of a function is
 // since all scalar types are coercible from comptime int 0.
-// Specifically helpful for the case of anytype and 
+// Specifically helpful for the case of anytype and
 // @TypeOf(arg) return types.
 
 fn DefaultArg(comptime T: type) T {
@@ -54,15 +54,12 @@ pub fn adapt(
     comptime argument_type: type,
     comptime function: anytype,
 ) fn (argument_type) @TypeOf(function(DefaultArg(argument_type))) {
-
     const return_type = @TypeOf(function(DefaultArg(argument_type)));
 
     return struct {
-
         pub fn call(x: argument_type) return_type {
-            return @call(.always_inline, function, .{ x });
+            return @call(.always_inline, function, .{x});
         }
-
     }.call;
 }
 
@@ -227,9 +224,10 @@ fn ImmutableBackend(comptime Self: type) type {
 
         pub fn print(self: Self, comptime format: []const u8, args: anytype) Self {
             const stdout = std.io.getStdOut();
+            defer stdout.close();
             const writer = stdout.writer();
             // this is intended to work like std.log.info
-            writer.print(format, args ++ self.items) catch { };
+            writer.print(format, args) catch {};
             return self;
         }
 
@@ -472,8 +470,23 @@ fn MutableBackend(comptime Self: type) type {
             return (self);
         }
 
+        pub fn setAt(self: Self, idx: anytype, item: Self.DataType) Self {
+            self.items[wrapIndex(self.items.len, idx)] = item;
+            return self;
+        }
+
+        pub fn replace(self: Self, opt: ReplaceOption, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
+            if (self.items.len == 0) return self;
+            if (opt == .all) return replaceAll(self, mode, this, with);
+            if (opt == .first or opt == .both)
+                _ = replaceFirst(self, mode, this, with);
+            if (opt == .last or opt == .both)
+                _ = replaceLast(self, mode, this, with);
+            return .{ .items = self.items[0..] };
+        }
+
         pub fn map(self: Self, f: fn (Self.DataType) Self.DataType) Self {
-            for (self.items) |*x| x.* = @call(.always_inline, f, .{ x.* });
+            for (self.items) |*x| x.* = @call(.always_inline, f, .{x.*});
             return self;
         }
 
@@ -555,6 +568,113 @@ fn MutableBackend(comptime Self: type) type {
                 if (i >= j) return;
 
                 std.mem.swap(T, &self.items[i], &self.items[j]);
+            }
+        }
+
+        fn replaceRange(self: Self, start: usize, end: usize, comptime mode: FluentMode, with: Parameter(Self.DataType, mode)) Self {
+            return switch (mode) {
+                .scalar => self.setAt(start, with),
+                .sequence, .any => blk: {
+                    @memcpy(self.items[start..end], with);
+                    break :blk .{ .items = self.items[0..] };
+                },
+            };
+        }
+
+        fn replaceFirst(self: Self, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
+            switch (mode) {
+                .scalar => for (self.items) |*item| {
+                    if (item.* != this) continue;
+                    item.* = with;
+                    return (self);
+                },
+                .sequence => {
+                    std.debug.assert(this.len == with.len);
+                    var win_iter = self.window(this.len, 1);
+                    var offset: usize = 0;
+                    while (win_iter.next()) |win| : (offset += 1) {
+                        if (std.mem.eql(Self.DataType, win, this) == false)
+                            continue;
+                        return replaceRange(self, offset, offset + with.len, mode, with);
+                    }
+                },
+                .any => {
+                    std.debug.assert(this.len == with.len);
+                    var index: usize = 0;
+                    while (index < self.items.len) : (index += 1) {
+                        if (std.mem.containsAtLeast(Self.DataType, this, 1, &[_]Self.DataType{self.items[index]})) {
+                            for (this, 0..) |ch, at| {
+                                if (ch == self.items[index])
+                                    return (self.setAt(index, with[at]));
+                            }
+                        }
+                    }
+                },
+            }
+            return self;
+        }
+
+        fn replaceLast(self: Self, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
+            switch (mode) {
+                .scalar => {
+                    var rev_iter = std.mem.reverseIterator(self.items);
+                    var index: usize = self.items.len - 1;
+                    while (rev_iter.next()) |item| : (index -= 1) {
+                        if (item != this)
+                            continue;
+                        return self.setAt(index, with);
+                    }
+                },
+                .sequence => {
+                    std.debug.assert(this.len == with.len);
+                    var start = self.items.len - this.len;
+                    while (start != 0) : (start -|= 1) {
+                        const win = self.items[start .. start + this.len];
+                        if (std.mem.eql(Self.DataType, win, this) == false)
+                            continue;
+                        return replaceRange(self, start, start + with.len, mode, with);
+                    }
+                },
+                .any => {
+                    var index: usize = self.items.len - 1;
+                    var rev_iter = std.mem.reverseIterator(self.items);
+                    while (rev_iter.next()) |item| : (index -= 1) {
+                        if (std.mem.containsAtLeast(Self.DataType, this, 1, &[_]Self.DataType{item})) {
+                            for (this, 0..) |ch, at| {
+                                if (ch == self.items[index])
+                                    return (self.setAt(index, with[at]));
+                            }
+                        }
+                    }
+                },
+            }
+            return self;
+        }
+
+        fn replaceAll(self: Self, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
+            switch (mode) {
+                .scalar => std.mem.replaceScalar(Self.DataType, self.items, this, with),
+                .sequence => {
+                    std.debug.assert(this.len == with.len);
+                    var win_iter = self.window(this.len, 1);
+                    var offset: usize = 0;
+                    while (win_iter.next()) |win| : (offset += 1) {
+                        if (std.mem.eql(Self.DataType, win, this))
+                            _ = replaceRange(self, offset, offset + with.len, mode, with);
+                    }
+                },
+                .any => {
+                    std.debug.assert(this.len == with.len);
+                    var index: usize = 0;
+                    while (index < self.items.len) : (index += 1) {
+                        if (std.mem.containsAtLeast(Self.DataType, this, 1, &[_]Self.DataType{self.items[index]})) {
+                            for (this, 0..) |ch, at| {
+                                if (ch == self.items[index])
+                                    _ = self.setAt(index, with[at]);
+                            }
+                        }
+                    }
+                },
             }
         }
 
@@ -688,12 +808,19 @@ fn MutableStringBackend(comptime Self: type) type {
 
 const CountOption = enum {
     all,
-    leading, 
+    leading,
     trailing,
     until,
     periphery,
-    inside, 
+    inside,
     inverse,
+};
+
+const ReplaceOption = enum {
+    first,
+    last,
+    all,
+    both,
 };
 
 const DirectionOption = enum {
@@ -710,7 +837,7 @@ const TrimOptions = enum {
 
 const PartitionOption = enum {
     stable,
-    unstable,  
+    unstable,
 };
 
 const SortOption = enum {
@@ -761,7 +888,7 @@ fn Parameter(comptime T: type, comptime mode: anytype) type {
         .{ "scalar", T },
         .{ "sequence", []const T },
         .{ "range", struct { start: usize, end: usize } },
-        .{ "predicate", fn (T) bool }
+        .{ "predicate", fn (T) bool },
     });
     return comptime param_types.get(@tagName(mode)) orelse unreachable;
 }
@@ -1991,6 +2118,131 @@ test "reverse(self)                            : MutSelf" {
             .copy(string)
             .reverse();
         try expect(result.equal("11001100"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "setAt(self, idx, with)                   : MutSelf" {
+    const string = "aabbccdd";
+    var buffer: [8]u8 = undefined;
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .setAt(0, 'A');
+        try expect(result.equal("Aabbccdd"));
+    }
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .setAt(7, 'D');
+        try expect(result.equal("aabbccdD"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "replace(self, opt, mode, this, with)     : scalar" {
+    const string = "abcabcabc";
+    var buffer: [9]u8 = undefined;
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.first, .scalar, 'a', 'z');
+        try expect(result.equal("zbcabcabc"));
+    }
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.last, .scalar, 'a', 'z');
+        try expect(result.equal("abcabczbc"));
+    }
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.both, .scalar, 'a', 'z');
+        try expect(result.equal("zbcabczbc"));
+    }
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.all, .scalar, 'a', 'z');
+        try expect(result.equal("zbczbczbc"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "replace(self, opt, mode, this, with)     : sequence" {
+    const string = "abcabcabc";
+    var buffer: [9]u8 = undefined;
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.first, .sequence, "abc", "000");
+        try expect(result.equal("000abcabc"));
+    }
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.last, .sequence, "abc", "000");
+        try expect(result.equal("abcabc000"));
+    }
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.both, .sequence, "abc", "000");
+        try expect(result.equal("000abc000"));
+    }
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.all, .sequence, "abc", "000");
+        try expect(result.equal("000000000"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "replace(self, opt, mode, this, with)     : any" {
+    const string = "abcabcabc";
+    var buffer: [9]u8 = undefined;
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.first, .any, "abc", "Zig");
+        try expect(result.equal("Zbcabcabc"));
+    }
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.last, .any, "abc", "Zig");
+        try expect(result.equal("abcabcabg"));
+    }
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.both, .any, "abc", "Zig");
+        try expect(result.equal("Zbcabcabg"));
+    }
+
+    {
+        const result = init(buffer[0..string.len])
+            .copy(string)
+            .replace(.all, .any, "abc", "Zig");
+        try expect(result.equal("ZigZigZig"));
     }
 }
 
