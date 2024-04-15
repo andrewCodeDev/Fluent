@@ -206,13 +206,13 @@ fn ImmutableBackend(comptime Self: type) type {
             return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Mul, mulGeneric, self.items, reduceInit(ReduceOp.Mul, Self.DataType) });
         }
 
-        // currently returns inf if items is empty
-        pub fn min(self: Self) Self.DataType {
-            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Min, minGeneric, self.items, reduceInit(ReduceOp.Min, Self.DataType) });
+        pub fn min(self: Self) ?Self.DataType {
+            return if (self.items.len == 0) null else
+                @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Min, minGeneric, self.items, reduceInit(ReduceOp.Min, Self.DataType) });
         }
-        // currently returns -inf if items is empty
-        pub fn max(self: Self) Self.DataType {
-            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, maxGeneric, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
+        pub fn max(self: Self) ?Self.DataType {
+            return if (self.items.len == 0) null else
+                @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, maxGeneric, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
         }
 
         pub fn write(self: Self, out_buffer: []Self.DataType) Self {
@@ -361,6 +361,18 @@ fn ImmutableBackend(comptime Self: type) type {
                 },
             }
             return (result);
+        }
+
+        pub fn sample(self: Self, random: std.Random, size: usize) []const Self.DataType {
+
+            std.debug.assert(size <= self.items.len);
+
+            if (size == self.items.len)
+                return self.items;
+
+            const start = random.intRangeAtMost(usize, 0, self.items.len - size);
+
+            return self.items[start..][0..size];
         }
     };
 }
@@ -558,6 +570,7 @@ fn MutableBackend(comptime Self: type) type {
                 std.mem.swap(T, &self.items[i], &self.items[j]);
             }
         }
+
         fn replaceRange(self: Self, start: usize, end: usize, comptime mode: FluentMode, with: Parameter(Self.DataType, mode)) Self {
             return switch (mode) {
                 .scalar => self.setAt(start, with),
@@ -663,6 +676,10 @@ fn MutableBackend(comptime Self: type) type {
                     }
                 },
             }
+        }
+
+        fn shuffle(self: Self, random: std.Random) Self {
+            random.shuffle(Self.DataType, self.items);
             return self;
         }
     };
@@ -828,10 +845,15 @@ const SortOption = enum {
     descending,
 };
 
+const SampleOption = enum {
+    scalar,
+    sequence,  
+};
+
 // any, sequence, scalar
 pub const FluentMode = std.mem.DelimiterType;
 
-////////////////////////////////////////////////////////////////////////////////
+////////////////////AtMost////////////////////////////////////////////////////
 // PRIVATE HELPERS :                                                          //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -928,11 +950,11 @@ inline fn reduceInit(comptime op: ReduceOp, comptime T: type) T {
         .Min => if (comptime info == .Int)
             math.maxInt(T)
         else
-            math.floatMax(T),
+            math.inf(T),
         .Max => if (comptime info == .Int)
             math.minInt(T)
         else
-            -math.floatMax(T),
+            -math.inf(T),
         else => @compileError("reduceInit: unsupported op"),
     };
 }
@@ -1402,6 +1424,11 @@ test "count(self, opt, mode, needle)           : scalar" {
         const result = self.count(.inverse, .scalar, '0');
         try expect(result == self.items.len - 6);
     }
+    {
+        // left and right are equal, should return length of array
+        const result = init("0000000").count(.periphery, .scalar, '0');
+        try expect(result == 7);
+    }
 }
 
 test "count(self, opt, mode, needle)           : sequence" {
@@ -1602,28 +1629,28 @@ test "min(self)                                : Self.DataType" {
     defer testing_allocator.free(self.items);
 
     {
-        const result = self.fill(2).min();
+        const result = self.fill(2).min() orelse unreachable;
         try expect(result == 2);
     }
 
     {
         const temp = self.fill(100);
         self.items[512] = -2147483648;
-        const result = temp.min();
+        const result = temp.min() orelse unreachable;
         try expect(result == -2147483648);
     }
 
     {
         const temp = self.fill(100);
         self.items[0] = 0;
-        const result = temp.min();
+        const result = temp.min() orelse unreachable;
         try expect(result == 0);
     }
 
     {
         const temp = self.fill(100);
         self.items[1023] = 0;
-        const result = temp.min();
+        const result = temp.min() orelse unreachable;
         try expect(result == 0);
     }
 }
@@ -1635,28 +1662,28 @@ test "max(self)                                : Self.DataType" {
     defer testing_allocator.free(self.items);
 
     {
-        const result = self.fill(2).max();
+        const result = self.fill(2).max() orelse unreachable;
         try expect(result == 2);
     }
 
     {
         const temp = self.fill(100);
         self.items[512] = 2147483647;
-        const result = temp.max();
+        const result = temp.max() orelse unreachable;
         try expect(result == 2147483647);
     }
 
     {
         const temp = self.fill(100);
         self.items[0] = 999;
-        const result = temp.max();
+        const result = temp.max() orelse unreachable;
         try expect(result == 999);
     }
 
     {
         const temp = self.fill(100);
         self.items[1023] = 777;
-        const result = temp.max();
+        const result = temp.max() orelse unreachable;
         try expect(result == 777);
     }
 }
@@ -2308,3 +2335,4 @@ test "title(self)                              : MutSelf" {
         try expect(result.equal("This"));
     }
 }
+
