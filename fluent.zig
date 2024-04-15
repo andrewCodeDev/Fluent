@@ -222,12 +222,14 @@ fn ImmutableBackend(comptime Self: type) type {
             return (self);
         }
 
-        pub fn print(self: Self, comptime format: []const u8, args: anytype) Self {
-            const stdout = std.io.getStdOut();
-            defer stdout.close();
-            const writer = stdout.writer();
-            // this is intended to work like std.log.info
-            writer.print(format, args) catch {};
+        pub fn print(self: Self, comptime format: []const u8) Self {
+            // this is intended to work similarly to std.log.info
+            const stderr = std.io.getStdErr();
+            defer stderr.close();
+            const writer = stderr.writer();
+            std.debug.getStderrMutex().lock();
+            defer std.debug.getStderrMutex().unlock();
+            writer.print(format, .{ self.items }) catch {};
             return self;
         }
 
@@ -676,6 +678,7 @@ fn MutableBackend(comptime Self: type) type {
                     }
                 },
             }
+            return self;
         }
 
         fn shuffle(self: Self, random: std.Random) Self {
