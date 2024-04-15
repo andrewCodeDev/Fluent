@@ -41,6 +41,8 @@ Mutable:
 ```
 Immutable:
 
+  digit        - returns optional integer parsed from string
+  float        - returns optional floating-point number parsed from string
   isDigit      - check if string only contains digits
   isAlpha      - check if string only contains alphabetic characters
   isSpaces     - check if string only contains whitespace
