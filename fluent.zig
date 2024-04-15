@@ -424,7 +424,7 @@ fn MutableBackend(comptime Self: type) type {
             return .{ .items = join_buffer[0..curr_idx] };
         }
 
-        pub fn partion(self: Self, comptime opt: PartitionOption, predicate: fn (Self.DataType) bool) Self {
+        pub fn partition(self: Self, comptime opt: PartitionOption, predicate: fn (Self.DataType) bool) Self {
             switch (opt) {
                 .stable => stablePartition(Self.DataType, self, predicate),
                 .unstable => unstablePartition(Self.DataType, self, predicate),
@@ -1827,7 +1827,7 @@ test "partition(self, opt, predicate)          : MutSelf" {
     inline for (expected, test_case, predicators) |answer, case, predicate| {
         const result = init(buffer[0..])
             .copy(case)
-            .partion(.stable, predicate);
+            .partition(.stable, predicate);
         try expect(result.equal(answer));
     }
 }
