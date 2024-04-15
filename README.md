@@ -2,13 +2,13 @@
 
 A Fluent interface for chaining algorithms over generic slices.
 
-### Installation
+# Installation
 
 Fluent is a single file implementation. Add the `fluent.zig` file to your project and import like any standard utility.
 
-### Algorithms
+# Algorithms
 
-# General Backend:
+### General Backend:
 
 ```
 Immutable:
@@ -36,7 +36,7 @@ Mutable:
 
 ```
 
-# String Backend:
+### String Backend:
 
 ```
 Immutable:
