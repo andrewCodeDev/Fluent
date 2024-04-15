@@ -8,16 +8,6 @@ const math = std.math;
 // Public Access Point                                                       ///
 ////////////////////////////////////////////////////////////////////////////////
 
-pub const Fluent = @This();
-pub const FluentMode = std.mem.DelimiterType;
-pub const FluentOption = enum { left, leading, right, trailing, both, all, around, inside, until, stable, unstable, ascending, descending, inverse };
-pub const FluentActor = enum {
-    scalar,
-    predicate,
-    range,
-    set,
-};
-
 pub fn init(slice: anytype) FluentInterface(DeepChild(@TypeOf(slice)), isConst(@TypeOf(slice))) {
     return .{ .items = slice };
 }
@@ -48,6 +38,36 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// UNARY FUNCTION ADAPTER :                                                   //
+////////////////////////////////////////////////////////////////////////////////
+
+// Used to determine what the return type of a function is
+// since all scalar types are coercible from comptime int 0.
+// Specifically helpful for the case of anytype and 
+// @TypeOf(arg) return types.
+
+fn DefaultArg(comptime T: type) T {
+    return 0;
+}
+
+pub fn adapt(
+    comptime argument_type: type,
+    comptime bind_tuple: anytype,
+    comptime function: anytype,
+) fn (argument_type) @TypeOf(function(DefaultArg(argument_type))) {
+
+    const return_type = @TypeOf(function(DefaultArg(argument_type)));
+
+    return struct {
+
+        pub fn call(x: argument_type) return_type {
+            return @call(.always_inline, function, bind_tuple ++ .{ x });
+        }
+
+    }.call;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 //                        Backends and Implementation                         //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -71,7 +91,7 @@ fn ImmutableBackend(comptime Self: type) type {
             self: Self,
             comptime mode: FluentMode,
             start_index: usize,
-            needle: FluentType(Self.DataType, mode),
+            needle: Parameter(Self.DataType, mode),
         ) ?usize {
             return switch (mode) {
                 .any => std.mem.indexOfAnyPos(Self.DataType, self.items, start_index, needle),
@@ -84,7 +104,7 @@ fn ImmutableBackend(comptime Self: type) type {
             self: Self,
             comptime mode: FluentMode,
             start_index: usize,
-            needle: FluentType(Self.DataType, mode),
+            needle: Parameter(Self.DataType, mode),
         ) bool {
             return findFrom(self, mode, start_index, needle) != null;
         }
@@ -92,7 +112,7 @@ fn ImmutableBackend(comptime Self: type) type {
         pub fn find(
             self: Self,
             comptime mode: FluentMode,
-            needle: FluentType(Self.DataType, mode),
+            needle: Parameter(Self.DataType, mode),
         ) ?usize {
             return findFrom(self, mode, 0, needle);
         }
@@ -100,7 +120,7 @@ fn ImmutableBackend(comptime Self: type) type {
         pub fn contains(
             self: Self,
             comptime mode: FluentMode,
-            needle: FluentType(Self.DataType, mode),
+            needle: Parameter(Self.DataType, mode),
         ) bool {
             return find(self, mode, needle) != null;
         }
@@ -112,7 +132,7 @@ fn ImmutableBackend(comptime Self: type) type {
         pub fn startsWith(
             self: Self,
             comptime mode: FluentMode,
-            needle: FluentType(Self.DataType, mode),
+            needle: Parameter(Self.DataType, mode),
         ) bool {
             if (self.items.len == 0)
                 return false;
@@ -131,7 +151,7 @@ fn ImmutableBackend(comptime Self: type) type {
         pub fn endsWith(
             self: Self,
             comptime mode: FluentMode,
-            needle: FluentType(Self.DataType, mode),
+            needle: Parameter(Self.DataType, mode),
         ) bool {
             if (self.items.len == 0)
                 return false;
@@ -148,18 +168,17 @@ fn ImmutableBackend(comptime Self: type) type {
         }
 
         /// supported opt = {all, leading/left, trailing/right, until, both/around, inside, inverse}
-        pub fn count(self: Self, opt: FluentOption, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
+        pub fn count(self: Self, opt: CountOption, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
             if (self.items.len == 0) return 0;
 
             return switch (opt) {
                 .all => countAll(self, mode, needle),
-                .leading, .left => countLeading(self, mode, needle),
-                .trailing, .right => countTrailing(self, mode, needle),
+                .leading => countLeading(self, mode, needle),
+                .trailing => countTrailing(self, mode, needle),
+                .periphery => countLeading(self, mode, needle) + countTrailing(self, mode, needle),
                 .until => countUntil(self, mode, needle),
-                .both, .around => countLeading(self, mode, needle) + countTrailing(self, mode, needle),
                 .inside => countAll(self, mode, needle) - (countLeading(self, mode, needle) + countTrailing(self, mode, needle)),
                 .inverse => self.items.len - countAll(self, mode, needle),
-                else => 0,
             };
         }
 
@@ -207,10 +226,12 @@ fn ImmutableBackend(comptime Self: type) type {
             return (self);
         }
 
-        pub fn print(self: Self, comptime format: []const u8, args: anytype) void {
+        pub fn print(self: Self, comptime format: []const u8, args: anytype) Self {
             const stdout = std.io.getStdOut();
             const writer = stdout.writer();
-            writer.print(format, args ++ self.items) catch unreachable;
+            // this is intended to work like std.log.info
+            writer.print(format, args ++ self.items) catch { };
+            return self;
         }
 
         ///////////////////////////////////////////////////
@@ -218,16 +239,16 @@ fn ImmutableBackend(comptime Self: type) type {
 
         pub fn split(
             self: Self,
-            comptime mode: FluentMode,
-            delimiter: FluentType(Self.DataType, mode),
+            comptime mode: std.mem.DelimiterType,
+            delimiter: Parameter(Self.DataType, mode),
         ) std.mem.SplitIterator(Self.DataType, mode) {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
         }
 
         pub fn tokenize(
             self: Self,
-            comptime mode: FluentMode,
-            delimiter: FluentType(Self.DataType, mode),
+            comptime mode: std.mem.DelimiterType,
+            delimiter: Parameter(Self.DataType, mode),
         ) std.mem.TokenIterator(Self.DataType, mode) {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
         }
@@ -245,7 +266,7 @@ fn ImmutableBackend(comptime Self: type) type {
         ///////////////////////
 
         /// count the occurence of needles in self.items returns 0 if no match is found
-        fn countAll(self: Self, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
+        fn countAll(self: Self, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
             var result: usize = 0;
 
             switch (mode) {
@@ -269,7 +290,7 @@ fn ImmutableBackend(comptime Self: type) type {
             return (result);
         }
 
-        fn countLeading(self: Self, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
+        fn countLeading(self: Self, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
             var result: usize = 0;
             switch (mode) {
                 .scalar => {
@@ -293,7 +314,7 @@ fn ImmutableBackend(comptime Self: type) type {
             return (result);
         }
 
-        fn countUntil(self: Self, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
+        fn countUntil(self: Self, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
             var result: usize = 0;
             switch (mode) {
                 .scalar => {
@@ -318,7 +339,7 @@ fn ImmutableBackend(comptime Self: type) type {
             return (result);
         }
 
-        fn countTrailing(self: Self, comptime mode: FluentMode, needle: FluentType(Self.DataType, mode)) usize {
+        fn countTrailing(self: Self, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
             var result: usize = 0;
             var rev_iter = std.mem.reverseIterator(self.items);
             switch (mode) {
@@ -336,7 +357,6 @@ fn ImmutableBackend(comptime Self: type) type {
                         result += 1;
                     }
                 },
-
                 .any => {
                     while (rev_iter.next()) |item| : (result += 1) {
                         if (std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{item}) == false) break;
@@ -366,7 +386,7 @@ fn MutableBackend(comptime Self: type) type {
         // includes operations like reduce, find, and iterators
         pub usingnamespace ImmutableBackend(Self);
 
-        pub fn sort(self: Self, comptime opt: FluentOption) Self {
+        pub fn sort(self: Self, comptime opt: SortOption) Self {
             const SF = SortFunction(Self.DataType);
             const func = if (opt == .ascending) SF.lessThan else SF.greaterThan;
             std.sort.block(Self.DataType, self.items, void{}, func);
@@ -405,19 +425,18 @@ fn MutableBackend(comptime Self: type) type {
             return .{ .items = join_buffer[0..curr_idx] };
         }
 
-        pub fn partion(self: Self, opt: FluentOption, predicate: fn (Self.DataType) bool) Self {
+        pub fn partion(self: Self, comptime opt: PartitionOption, predicate: fn (Self.DataType) bool) Self {
             switch (opt) {
                 .stable => stablePartition(Self.DataType, self, predicate),
                 .unstable => unstablePartition(Self.DataType, self, predicate),
-                else => {},
             }
             return (self);
         }
 
-        pub fn trim(self: Self, comptime opt: FluentOption, comptime kind: FluentActor, actor: FluentActorKind(Self.DataType, kind)) Self {
+        pub fn trim(self: Self, comptime direction: DirectionOption, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) Self {
             if (self.items.len <= 1) return self;
-            const start: usize = if (opt == .left or opt == .both) trimLeft(self, kind, actor) else 0;
-            const end: usize = if (opt == .right or opt == .both) trimRight(self, kind, actor) else self.items.len;
+            const start: usize = if (direction == .left or direction == .both) trimLeft(self, opt, actor) else 0;
+            const end: usize = if (direction == .right or direction == .both) trimRight(self, opt, actor) else self.items.len;
             return .{ .items = self.items[start..end] };
         }
 
@@ -443,7 +462,7 @@ fn MutableBackend(comptime Self: type) type {
         }
 
         pub fn map(self: Self, f: fn (Self.DataType) Self.DataType) Self {
-            for (self.items) |*x| x.* = f(x.*);
+            for (self.items) |*x| x.* = @call(.always_inline, f, .{ x.* });
             return self;
         }
 
@@ -457,40 +476,38 @@ fn MutableBackend(comptime Self: type) type {
             self.items[wrapIndex(self.items.len, idx2)] = temp;
         }
 
-        fn trimLeft(self: Self, comptime kind: FluentActor, actor: FluentActorKind(Self.DataType, kind)) usize {
+        fn trimLeft(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
             if (self.items.len <= 1) return 0;
             var start: usize = 0;
             const end: usize = self.items.len;
-            switch (kind) {
+            switch (opt) {
                 .scalar => {
                     while (start < end and self.items[start] == actor) start += 1;
                 },
                 .predicate => {
                     while (start < end and actor(self.items[start])) start += 1;
                 },
-                .set => {
+                .any => {
                     while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[start]) != null) start += 1;
                 },
-                else => {},
             }
             return start;
         }
 
-        fn trimRight(self: Self, comptime act: FluentActor, actor: FluentActorKind(Self.DataType, act)) usize {
+        fn trimRight(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
             if (self.items.len <= 1) return 0;
             const start: usize = 0;
             var end: usize = self.items.len;
-            switch (act) {
+            switch (opt) {
                 .scalar => {
                     while (end > start and self.items[end - 1] == actor) end -= 1;
                 },
                 .predicate => {
                     while (end > start and actor(self.items[end - 1])) end -= 1;
                 },
-                .set => {
+                .any => {
                     while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[end - 1]) != null) end -= 1;
                 },
-                else => {},
             }
             return end;
         }
@@ -649,6 +666,45 @@ fn MutableStringBackend(comptime Self: type) type {
     };
 }
 
+//////////////////////////////////////////////////////////////////////////////////
+// ENUMERATED OPTIONS :                                                         //
+//////////////////////////////////////////////////////////////////////////////////
+
+const CountOption = enum {
+    all,
+    leading, 
+    trailing,
+    until,
+    periphery,
+    inside, 
+    inverse,
+};
+
+const DirectionOption = enum {
+    left,
+    right,
+    both,
+};
+
+const TrimOptions = enum {
+    scalar,
+    predicate,
+    any,
+};
+
+const PartitionOption = enum {
+    stable,
+    unstable,  
+};
+
+const SortOption = enum {
+    ascending,
+    descending,
+};
+
+// any, sequence, scalar
+pub const FluentMode = std.mem.DelimiterType;
+
 ////////////////////////////////////////////////////////////////////////////////
 // PRIVATE HELPERS :                                                          //
 ////////////////////////////////////////////////////////////////////////////////
@@ -678,20 +734,15 @@ fn isUnsigned(comptime T: type) bool {
     };
 }
 
-fn FluentType(comptime T: type, comptime mode: FluentMode) type {
-    return switch (mode) {
-        .sequence, .any => []const T,
-        .scalar => T,
-    };
-}
-
-fn FluentActorKind(comptime T: type, comptime kind: FluentActor) type {
-    return switch (kind) {
-        .scalar => return T,
-        .predicate => fn (T) bool,
-        .range => struct { start: usize, end: usize },
-        .set => return []const T,
-    };
+fn Parameter(comptime T: type, comptime mode: anytype) type {
+    const param_types = std.ComptimeStringMap(type, .{
+        .{ "any", []const T },
+        .{ "scalar", T },
+        .{ "sequence", []const T },
+        .{ "range", struct { start: usize, end: usize } },
+        .{ "predicate", fn (T) bool }
+    });
+    return comptime param_types.get(@tagName(mode)) orelse unreachable;
 }
 
 // checks if we are pointing to an array
@@ -814,7 +865,7 @@ const expect = std.testing.expect;
 ////////////////////////////////////////////////////////////////////////////////
 
 test "findFrom(self, mode, start_index, needle) : scalar" {
-    const self = Fluent.init("This is a test");
+    const self = init("This is a test");
 
     {
         const result = self.findFrom(.scalar, 0, 'T') orelse unreachable;
@@ -833,7 +884,7 @@ test "findFrom(self, mode, start_index, needle) : scalar" {
 }
 
 test "findFrom(self, mode, start_index, needle) : sequence" {
-    const self = Fluent.init("This is a test");
+    const self = init("This is a test");
 
     {
         const result = self.findFrom(.sequence, 0, "This") orelse unreachable;
@@ -852,7 +903,7 @@ test "findFrom(self, mode, start_index, needle) : sequence" {
 }
 
 test "findFrom(self, mode, start_index, needle) : any" {
-    const self = Fluent.init("This is a test");
+    const self = init("This is a test");
 
     {
         const result = self.findFrom(.any, 0, "T") orelse unreachable;
@@ -873,7 +924,7 @@ test "findFrom(self, mode, start_index, needle) : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "find(self, mode, needle)                  : scalar" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.find(.scalar, 'T') orelse unreachable;
@@ -892,7 +943,7 @@ test "find(self, mode, needle)                  : scalar" {
 }
 
 test "find(self, mode, needle)                  : sequence" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.find(.sequence, "This") orelse unreachable;
@@ -911,7 +962,7 @@ test "find(self, mode, needle)                  : sequence" {
 }
 
 test "find(self, mode, needle)                  : any" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.find(.any, "T") orelse unreachable;
@@ -932,7 +983,7 @@ test "find(self, mode, needle)                  : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "containsFrom(self, mode, needle)          : scalar" {
-    const self = Fluent.init("This is a test");
+    const self = init("This is a test");
 
     {
         const result = self.containsFrom(.scalar, 0, 'T');
@@ -951,7 +1002,7 @@ test "containsFrom(self, mode, needle)          : scalar" {
 }
 
 test "containsFrom(self, mode, needle)          : sequence" {
-    const self = Fluent.init("This is a test");
+    const self = init("This is a test");
 
     {
         const result = self.containsFrom(.sequence, 0, "This");
@@ -970,7 +1021,7 @@ test "containsFrom(self, mode, needle)          : sequence" {
 }
 
 test "containsFrom(self, mode, needle)          : any" {
-    const self = Fluent.init("This is a test");
+    const self = init("This is a test");
 
     {
         const result = self.containsFrom(.sequence, 0, "This");
@@ -991,7 +1042,7 @@ test "containsFrom(self, mode, needle)          : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "contains(self, mode, needle)             : scalar" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.contains(.scalar, 'T');
@@ -1010,7 +1061,7 @@ test "contains(self, mode, needle)             : scalar" {
 }
 
 test "contains(self, mode, needle)             : sequence" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.contains(.sequence, "This");
@@ -1029,7 +1080,7 @@ test "contains(self, mode, needle)             : sequence" {
 }
 
 test "contains(self, mode, needle)             : any" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.contains(.any, "This");
@@ -1050,7 +1101,7 @@ test "contains(self, mode, needle)             : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "getAt(self, idx)                         : scalar" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.getAt(0);
@@ -1071,7 +1122,7 @@ test "getAt(self, idx)                         : scalar" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "startsWith(self, mode, needle)           : scalar" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.startsWith(.scalar, 'T');
@@ -1090,7 +1141,7 @@ test "startsWith(self, mode, needle)           : scalar" {
 }
 
 test "startsWith(self, mode, needle)           : sequence" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.startsWith(.sequence, "This");
@@ -1109,7 +1160,7 @@ test "startsWith(self, mode, needle)           : sequence" {
 }
 
 test "startsWith(self, mode, needle)           : any" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.startsWith(.sequence, "This");
@@ -1130,7 +1181,7 @@ test "startsWith(self, mode, needle)           : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "endsWith(self, mode, needle)             : scalar" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.endsWith(.scalar, 'z');
@@ -1149,7 +1200,7 @@ test "endsWith(self, mode, needle)             : scalar" {
 }
 
 test "endsWith(self, mode, needle)             : sequence" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.endsWith(.sequence, "testz");
@@ -1168,7 +1219,7 @@ test "endsWith(self, mode, needle)             : sequence" {
 }
 
 test "endsWith(self, mode, needle)             : any" {
-    const self = Fluent.init("This is a testz");
+    const self = init("This is a testz");
 
     {
         const result = self.endsWith(.sequence, "testz");
@@ -1189,7 +1240,7 @@ test "endsWith(self, mode, needle)             : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "count(self, opt, mode, needle)           : scalar" {
-    const self = Fluent.init("000_111_000");
+    const self = init("000_111_000");
 
     {
         const result = self.count(.all, .scalar, '0');
@@ -1212,7 +1263,7 @@ test "count(self, opt, mode, needle)           : scalar" {
     }
 
     {
-        const result = self.count(.both, .scalar, '0');
+        const result = self.count(.periphery, .scalar, '0');
         try expect(result == 6);
     }
 
@@ -1228,7 +1279,7 @@ test "count(self, opt, mode, needle)           : scalar" {
 }
 
 test "count(self, opt, mode, needle)           : sequence" {
-    const self = Fluent.init("000_111_000");
+    const self = init("000_111_000");
 
     {
         const result = self.count(.all, .sequence, "000");
@@ -1251,7 +1302,7 @@ test "count(self, opt, mode, needle)           : sequence" {
     }
 
     {
-        const result = self.count(.both, .sequence, "000");
+        const result = self.count(.periphery, .sequence, "000");
         try expect(result == 2);
     }
 
@@ -1267,7 +1318,7 @@ test "count(self, opt, mode, needle)           : sequence" {
 }
 
 test "count(self, opt, mode, needle)           : any" {
-    const self = Fluent.init("000_111_000");
+    const self = init("000_111_000");
 
     {
         const result = self.count(.all, .any, "01_");
@@ -1290,7 +1341,7 @@ test "count(self, opt, mode, needle)           : any" {
     }
 
     {
-        const result = self.count(.both, .any, "_0");
+        const result = self.count(.periphery, .any, "_0");
         try expect(result == 8);
     }
 
@@ -1308,7 +1359,7 @@ test "count(self, opt, mode, needle)           : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "slice(self, start, end)                  : [start..end]" {
-    const self = Fluent.init("000_111_000");
+    const self = init("000_111_000");
 
     {
         const result = self.slice(0, self.items.len);
@@ -1329,7 +1380,7 @@ test "slice(self, start, end)                  : [start..end]" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "order(self, items)                       : Order" {
-    const self = Fluent.init(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
+    const self = init(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
 
     {
         const result = self.order(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
@@ -1360,8 +1411,8 @@ test "order(self, items)                       : Order" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "equal(self, items)                       : bool" {
-    const self_num = Fluent.init(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
-    const self_str = Fluent.init("This is a string");
+    const self_num = init(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
+    const self_str = init("This is a string");
 
     {
         const result = self_num.equal(&[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8, 8 });
@@ -1387,7 +1438,7 @@ test "equal(self, items)                       : bool" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "sum(self)                                : Self.DataType" {
-    const self = Fluent.init(try testing_allocator.alloc(i32, 10000));
+    const self = init(try testing_allocator.alloc(i32, 10000));
     defer testing_allocator.free(self.items);
 
     {
@@ -1404,7 +1455,7 @@ test "sum(self)                                : Self.DataType" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "product(self)                            : Self.DataType" {
-    const self = Fluent.init(try testing_allocator.alloc(i32, 16));
+    const self = init(try testing_allocator.alloc(i32, 16));
     defer testing_allocator.free(self.items);
 
     {
@@ -1421,7 +1472,7 @@ test "product(self)                            : Self.DataType" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "min(self)                                : Self.DataType" {
-    const self = Fluent.init(try testing_allocator.alloc(i32, 1024));
+    const self = init(try testing_allocator.alloc(i32, 1024));
     defer testing_allocator.free(self.items);
 
     {
@@ -1454,7 +1505,7 @@ test "min(self)                                : Self.DataType" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "max(self)                                : Self.DataType" {
-    const self = Fluent.init(try testing_allocator.alloc(i32, 1024));
+    const self = init(try testing_allocator.alloc(i32, 1024));
     defer testing_allocator.free(self.items);
 
     {
@@ -1487,13 +1538,13 @@ test "max(self)                                : Self.DataType" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "split(self, mode, delimiter)             : SplitIterator" {
-    const self = Fluent.init("This is a string");
+    const self = init("This is a string");
     const expected = [_][]const u8{ "This", "is", "a", "string" };
 
     {
         var iter = self.split(.scalar, ' ');
         for (expected) |item| {
-            const result = Fluent.init(iter.next() orelse unreachable);
+            const result = init(iter.next() orelse unreachable);
             try expect(result.equal(item));
         }
     }
@@ -1509,7 +1560,7 @@ test "isDigit(self)                            : bool" {
 
     {
         for (test_case, expected) |item, answer| {
-            const result = Fluent.init(item).isDigit();
+            const result = init(item).isDigit();
             try expect(result == answer);
         }
     }
@@ -1523,7 +1574,7 @@ test "isAlpha(self)                            : bool" {
 
     {
         for (test_case, expected) |item, answer| {
-            const result = Fluent.init(item).isAlpha();
+            const result = init(item).isAlpha();
             try expect(result == answer);
         }
     }
@@ -1537,7 +1588,7 @@ test "isSpaces(self)                           : bool" {
 
     {
         for (test_case, expected) |item, answer| {
-            const result = Fluent.init(item).isSpaces();
+            const result = init(item).isSpaces();
             try expect(result == answer);
         }
     }
@@ -1551,7 +1602,7 @@ test "isLower(self)                            : bool" {
 
     {
         for (test_case, expected) |item, answer| {
-            const result = Fluent.init(item).isLower();
+            const result = init(item).isLower();
             try expect(result == answer);
         }
     }
@@ -1565,7 +1616,7 @@ test "isUpper(self)                            : bool" {
 
     {
         for (test_case, expected) |item, answer| {
-            const result = Fluent.init(item).isUpper();
+            const result = init(item).isUpper();
             try expect(result == answer);
         }
     }
@@ -1579,7 +1630,7 @@ test "isHex(self)                              : bool" {
 
     {
         for (test_case, expected) |item, answer| {
-            const result = Fluent.init(item).isHex();
+            const result = init(item).isHex();
             try expect(result == answer);
         }
     }
@@ -1588,7 +1639,7 @@ test "isHex(self)                              : bool" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "isASCII(self)                            : bool" {
-    const self = Fluent.init(try testing_allocator.alloc(u8, 255));
+    const self = init(try testing_allocator.alloc(u8, 255));
     defer testing_allocator.free(self.items);
     for (self.items, 0..255) |*item, i| item.* = @truncate(i);
 
@@ -1606,7 +1657,7 @@ test "isASCII(self)                            : bool" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "isPrintable(self)                        : bool" {
-    const self = Fluent.init(try testing_allocator.alloc(u8, 255));
+    const self = init(try testing_allocator.alloc(u8, 255));
     defer testing_allocator.free(self.items);
     for (self.items, 0..255) |*item, i| item.* = @truncate(i);
 
@@ -1624,7 +1675,7 @@ test "isPrintable(self)                        : bool" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "isAlnum(self)                            : bool" {
-    const self = Fluent.init(try testing_allocator.alloc(u8, 255));
+    const self = init(try testing_allocator.alloc(u8, 255));
     defer testing_allocator.free(self.items);
     for (self.items, 0..255) |*item, i| item.* = @truncate(i);
 
@@ -1669,7 +1720,7 @@ test "sort(self, opt)                          : MutSelf" {
         &[_]i32{ 6, 5, 4, 3, 2, 1 },
     };
 
-    const sorting_order = [_]FluentOption{
+    const sorting_order = [_]SortOption{
         .ascending,
         .ascending,
         .ascending,
@@ -1681,7 +1732,7 @@ test "sort(self, opt)                          : MutSelf" {
     {
         // I love Zig <3
         inline for (expected, sorting_order, test_case) |answer, order, case| {
-            const result = Fluent.init(buffer[0..])
+            const result = init(buffer[0..])
                 .copy(case)
                 .sort(order);
             try expect(result.equal(answer) == true);
@@ -1695,7 +1746,7 @@ test "fill(self, scalar)                       : MutSelf" {
     var buffer: [32]u8 = undefined;
 
     {
-        const result = Fluent.init(buffer[0..])
+        const result = init(buffer[0..])
             .fill('1')
             .count(.all, .scalar, '1');
         try expect(result == 32);
@@ -1708,7 +1759,7 @@ test "copy(self, scalar)                       : MutSelf" {
     var buffer: [32]u8 = undefined;
 
     {
-        const result = Fluent.init(buffer[0..])
+        const result = init(buffer[0..])
             .copy("00001111222244445555666677778888");
         try expect(result.equal("00001111222244445555666677778888"));
     }
@@ -1723,7 +1774,7 @@ test "concat(self, items, concat_buffer)       : MutSelf" {
     var concat_buffer: [16]u8 = undefined;
 
     {
-        const result = Fluent.init(start_buffer[0..start.len])
+        const result = init(start_buffer[0..start.len])
             .copy(start[0..])
             .concat(" is a string", concat_buffer[0..]);
         try expect(result.equal(expected));
@@ -1744,7 +1795,7 @@ test "join(self, collection, join_buffer)      : MutSelf" {
     var join_buffer: [15]u8 = undefined;
 
     {
-        const result = Fluent.init(start_buffer[0..])
+        const result = init(start_buffer[0..])
             .copy("0")
             .join(collection, join_buffer[0..]);
         try expect(result.equal("011222333344444") == true);
@@ -1775,7 +1826,7 @@ test "partition(self, opt, predicate)          : MutSelf" {
 
     var buffer: [8]u8 = undefined;
     inline for (expected, test_case, predicators) |answer, case, predicate| {
-        const result = Fluent.init(buffer[0..])
+        const result = init(buffer[0..])
             .copy(case)
             .partion(.stable, predicate);
         try expect(result.equal(answer));
@@ -1789,21 +1840,21 @@ test "trim(self, opt, kind, actor)             : scalar" {
     var buffer: [source.len]u8 = undefined;
 
     {
-        const result = Fluent.init(buffer[0..source.len])
+        const result = init(buffer[0..source.len])
             .copy(source)
             .trim(.left, .scalar, ' ');
         try expect(result.equal(source[5..]));
     }
 
     {
-        const result = Fluent.init(buffer[0..source.len])
+        const result = init(buffer[0..source.len])
             .copy(source)
             .trim(.right, .scalar, ' ');
         try expect(result.equal(source[0 .. source.len - 5]));
     }
 
     {
-        const result = Fluent.init(buffer[0..source.len])
+        const result = init(buffer[0..source.len])
             .copy(source)
             .trim(.both, .scalar, ' ');
         try expect(result.equal(source[5 .. source.len - 5]));
@@ -1817,21 +1868,21 @@ test "trim(self, opt, kind, actor)             : predicate" {
     var buffer: [source.len]u8 = undefined;
 
     {
-        const result = Fluent.init(buffer[0..source.len])
+        const result = init(buffer[0..source.len])
             .copy(source)
             .trim(.left, .predicate, std.ascii.isWhitespace);
         try expect(result.equal(source[5..]));
     }
 
     {
-        const result = Fluent.init(buffer[0..source.len])
+        const result = init(buffer[0..source.len])
             .copy(source)
             .trim(.right, .predicate, std.ascii.isWhitespace);
         try expect(result.equal(source[0 .. source.len - 5]));
     }
 
     {
-        const result = Fluent.init(buffer[0..source.len])
+        const result = init(buffer[0..source.len])
             .copy(source)
             .trim(.both, .predicate, std.ascii.isWhitespace);
         try expect(result.equal(source[5 .. source.len - 5]));
@@ -1846,23 +1897,23 @@ test "trim(self, opt, kind, actor)             : set" {
     var buffer: [source.len]u8 = undefined;
 
     {
-        const result = Fluent.init(buffer[0..source.len])
+        const result = init(buffer[0..source.len])
             .copy(source)
-            .trim(.left, .set, set[0..]);
+            .trim(.left, .any, set[0..]);
         try expect(result.equal(source[5..]));
     }
 
     {
-        const result = Fluent.init(buffer[0..source.len])
+        const result = init(buffer[0..source.len])
             .copy(source)
-            .trim(.right, .set, set[0..]);
+            .trim(.right, .any, set[0..]);
         try expect(result.equal(source[0 .. source.len - 5]));
     }
 
     {
-        const result = Fluent.init(buffer[0..source.len])
+        const result = init(buffer[0..source.len])
             .copy(source)
-            .trim(.both, .set, set[0..]);
+            .trim(.both, .any, set[0..]);
         try expect(result.equal(source[5 .. source.len - 5]));
     }
 }
@@ -1874,21 +1925,21 @@ test "rotate(self, amount)                     : MutSelf" {
     var buffer: [8]u8 = undefined;
 
     {
-        const result = Fluent.init(buffer[0..string.len])
+        const result = init(buffer[0..string.len])
             .copy(string)
             .rotate(0);
         try expect(result.equal(string));
     }
 
     {
-        const result = Fluent.init(buffer[0..string.len])
+        const result = init(buffer[0..string.len])
             .copy(string)
             .rotate(1);
         try expect(result.equal("10011001"));
     }
 
     {
-        const result = Fluent.init(buffer[0..string.len])
+        const result = init(buffer[0..string.len])
             .copy(string)
             .rotate(-1);
         try expect(result.equal("01100110"));
@@ -1902,7 +1953,7 @@ test "reverse(self)                            : MutSelf" {
     var buffer: [8]u8 = undefined;
 
     {
-        const result = Fluent.init(buffer[0..string.len])
+        const result = init(buffer[0..string.len])
             .copy(string)
             .reverse()
             .reverse();
@@ -1910,7 +1961,7 @@ test "reverse(self)                            : MutSelf" {
     }
 
     {
-        const result = Fluent.init(buffer[0..string.len])
+        const result = init(buffer[0..string.len])
             .copy(string)
             .reverse();
         try expect(result.equal("11001100"));
@@ -1926,14 +1977,14 @@ test "lower(self)                              : MutSelf" {
     var string_buffer: [16]u8 = undefined;
 
     {
-        const result = Fluent.init(string_buffer[0..string.len])
+        const result = init(string_buffer[0..string.len])
             .copy(string)
             .lower();
         try expect(result.equal("this is a string"));
     }
 
     {
-        const result = Fluent.init(string_buffer[0..string.len])
+        const result = init(string_buffer[0..string.len])
             .copy(string)
             .slice(0, 4)
             .lower();
@@ -1948,14 +1999,14 @@ test "upper(self)                              : MutSelf" {
     var string_buffer: [16]u8 = undefined;
 
     {
-        const result = Fluent.init(string_buffer[0..string.len])
+        const result = init(string_buffer[0..string.len])
             .copy(string)
             .upper();
         try expect(result.equal("THIS IS A STRING"));
     }
 
     {
-        const result = Fluent.init(string_buffer[0..string.len])
+        const result = init(string_buffer[0..string.len])
             .copy(string)
             .slice(0, 4)
             .upper();
@@ -1970,14 +2021,14 @@ test "capitalize(self)                         : MutSelf" {
     var string_buffer: [16]u8 = undefined;
 
     {
-        const result = Fluent.init(string_buffer[0..string.len])
+        const result = init(string_buffer[0..string.len])
             .copy(string)
             .capitalize();
         try expect(result.equal("This is a string"));
     }
 
     {
-        const result = Fluent.init(string_buffer[0..string.len])
+        const result = init(string_buffer[0..string.len])
             .copy(string)
             .slice(0, 4)
             .capitalize();
@@ -1992,14 +2043,14 @@ test "title(self)                              : MutSelf" {
     var string_buffer: [16]u8 = undefined;
 
     {
-        const result = Fluent.init(string_buffer[0..string.len])
+        const result = init(string_buffer[0..string.len])
             .copy(string)
             .title();
         try expect(result.equal("This Is A String"));
     }
 
     {
-        const result = Fluent.init(string_buffer[0..string.len])
+        const result = init(string_buffer[0..string.len])
             .copy(string)
             .slice(0, 4)
             .title();
