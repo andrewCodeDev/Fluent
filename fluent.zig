@@ -309,6 +309,13 @@ fn ImmutableBackend(comptime Self: type) type {
             return .{ .items = join_buffer[0..curr_idx] };
         }
 
+        pub fn trim(self: Self, comptime direction: DirectionOption, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) Self {
+            if (self.items.len <= 1) return self;
+            const start: usize = if (direction == .left or direction == .periphery) trimLeft(self, opt, actor) else 0;
+            const end: usize = if (direction == .right or direction == .periphery) trimRight(self, opt, actor) else self.items.len;
+            return .{ .items = self.items[start..end] };
+        }
+
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
@@ -346,6 +353,42 @@ fn ImmutableBackend(comptime Self: type) type {
         ///////////////////////
         //  PRIVATE SECTION  //
         ///////////////////////
+
+        fn trimLeft(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
+            if (self.items.len <= 1) return 0;
+            var start: usize = 0;
+            const end: usize = self.items.len;
+            switch (opt) {
+                .scalar => {
+                    while (start < end and self.items[start] == actor) start += 1;
+                },
+                .predicate => {
+                    while (start < end and actor(self.items[start])) start += 1;
+                },
+                .any => {
+                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[start]) != null) start += 1;
+                },
+            }
+            return start;
+        }
+
+        fn trimRight(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
+            if (self.items.len <= 1) return 0;
+            const start: usize = 0;
+            var end: usize = self.items.len;
+            switch (opt) {
+                .scalar => {
+                    while (end > start and self.items[end - 1] == actor) end -= 1;
+                },
+                .predicate => {
+                    while (end > start and actor(self.items[end - 1])) end -= 1;
+                },
+                .any => {
+                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[end - 1]) != null) end -= 1;
+                },
+            }
+            return end;
+        }
 
         /// count the occurence of needles in self.items returns 0 if no match is found
         fn countAll(self: Self, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
@@ -495,13 +538,6 @@ fn MutableBackend(comptime Self: type) type {
             return (self);
         }
 
-        pub fn trim(self: Self, comptime direction: DirectionOption, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) Self {
-            if (self.items.len <= 1) return self;
-            const start: usize = if (direction == .left or direction == .periphery) trimLeft(self, opt, actor) else 0;
-            const end: usize = if (direction == .right or direction == .periphery) trimRight(self, opt, actor) else self.items.len;
-            return .{ .items = self.items[start..end] };
-        }
-
         pub fn rotate(self: Self, amount: anytype) Self {
             const len = self.items.len;
 
@@ -556,42 +592,6 @@ fn MutableBackend(comptime Self: type) type {
             const temp = self.items[wrapIndex(self.items.len, idx1)];
             self.items[wrapIndex(self.items.len, idx1)] = self.items[wrapIndex(self.items.len, idx2)];
             self.items[wrapIndex(self.items.len, idx2)] = temp;
-        }
-
-        fn trimLeft(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
-            if (self.items.len <= 1) return 0;
-            var start: usize = 0;
-            const end: usize = self.items.len;
-            switch (opt) {
-                .scalar => {
-                    while (start < end and self.items[start] == actor) start += 1;
-                },
-                .predicate => {
-                    while (start < end and actor(self.items[start])) start += 1;
-                },
-                .any => {
-                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[start]) != null) start += 1;
-                },
-            }
-            return start;
-        }
-
-        fn trimRight(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
-            if (self.items.len <= 1) return 0;
-            const start: usize = 0;
-            var end: usize = self.items.len;
-            switch (opt) {
-                .scalar => {
-                    while (end > start and self.items[end - 1] == actor) end -= 1;
-                },
-                .predicate => {
-                    while (end > start and actor(self.items[end - 1])) end -= 1;
-                },
-                .any => {
-                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[end - 1]) != null) end -= 1;
-                },
-            }
-            return end;
         }
 
         fn stablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
