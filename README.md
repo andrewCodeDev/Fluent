@@ -58,17 +58,21 @@ sort         - sorts the range in ascending or descending order
 ```
 Immutable:
 
-digit        - returns optional integer parsed from string
-float        - returns optional floating-point number parsed from string
-isDigit      - check if string only contains digits
-isAlpha      - check if string only contains alphabetic characters
-isSpaces     - check if string only contains whitespace
-isLower      - check if string only contains alphabetic lower case
-isUpper      - check if string only contains alphabetic upper case
-isHex        - check if string only contains hexidecimal characters
-isASCII      - check if string only contains ASCII characters
-isPrintable  - check if string only contains printable characters
-isAlnum      - check if string only contains alpha numeric characters
+digit          - returns optional integer parsed from string
+differenceWith - returns set diference between acquired slice and given slice
+float          - returns optional floating-point number parsed from string
+getToken       - extract a token given a set of delimiters
+intersectWith  - returns set intersection between acquired slice and given slice
+isDigit        - check if string only contains digits
+isAlpha        - check if string only contains alphabetic characters
+isSpaces       - check if string only contains whitespace
+isLower        - check if string only contains alphabetic lower case
+isUpper        - check if string only contains alphabetic upper case
+isHex          - check if string only contains hexidecimal characters
+isASCII        - check if string only contains ASCII characters
+isPrintable    - check if string only contains printable characters
+isAlnum        - check if string only contains alpha numeric characters
+unionWith      - returns set intersection between acquired slice and given slice
 
 Mutable:
 

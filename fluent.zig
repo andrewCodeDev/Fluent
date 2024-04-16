@@ -828,6 +828,51 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return .{ .items = self.items[start..end] };
         }
 
+        pub fn differenceWith(self: Self, string: []const u8, diff_buffer: []u8) FluentInterface(Self.DataType, false) {
+            var items_set = StringBitSet.init();
+            var string_set = StringBitSet.init();
+
+            for (self.items) |item| {
+                items_set.setValue(item, true);
+            }
+
+            for (string) |char| {
+                string_set.setValue(char, true);
+            }
+            items_set.differenceWith(string_set).fillBuffer(diff_buffer);
+            return .{ .items = diff_buffer[0..] };
+        }
+
+        pub fn unionWith(self: Self, string: []const u8, union_buffer: []u8) FluentInterface(Self.DataType, false) {
+            var items_set = StringBitSet.init();
+            var string_set = StringBitSet.init();
+
+            for (self.items) |item| {
+                items_set.setValue(item, true);
+            }
+
+            for (string) |char| {
+                string_set.setValue(char, true);
+            }
+            items_set.unionWith(string_set).fillBuffer(union_buffer);
+            return .{ .items = union_buffer[0..] };
+        }
+
+        pub fn intersectWith(self: Self, string: []const u8, inter_buffer: []u8) FluentInterface(Self.DataType, false) {
+            var items_set = StringBitSet.init();
+            var string_set = StringBitSet.init();
+
+            for (self.items) |item| {
+                items_set.setValue(item, true);
+            }
+
+            for (string) |char| {
+                string_set.setValue(char, true);
+            }
+            items_set.intersectWith(string_set).fillBuffer(inter_buffer);
+            return .{ .items = inter_buffer[0..] };
+        }
+
         ///////////////////////
         //  PRIVATE SECTION  //
         ///////////////////////
@@ -889,51 +934,6 @@ fn MutableStringBackend(comptime Self: type) type {
                 prev = self.items[i];
             }
             return self;
-        }
-
-        pub fn differenceWith(self: Self, string: []const u8, diff_buffer: []u8) Self {
-            var items_set = StringBitSet.init();
-            var string_set = StringBitSet.init();
-
-            for (self.items) |item| {
-                items_set.setValue(item, true);
-            }
-
-            for (string) |char| {
-                string_set.setValue(char, true);
-            }
-            items_set.differenceWith(string_set).fillBuffer(diff_buffer);
-            return .{ .items = diff_buffer[0..] };
-        }
-
-        pub fn unionWith(self: Self, string: []const u8, union_buffer: []u8) Self {
-            var items_set = StringBitSet.init();
-            var string_set = StringBitSet.init();
-
-            for (self.items) |item| {
-                items_set.setValue(item, true);
-            }
-
-            for (string) |char| {
-                string_set.setValue(char, true);
-            }
-            items_set.unionWith(string_set).fillBuffer(union_buffer);
-            return .{ .items = union_buffer[0..] };
-        }
-
-        pub fn intersectWith(self: Self, string: []const u8, inter_buffer: []u8) Self {
-            var items_set = StringBitSet.init();
-            var string_set = StringBitSet.init();
-
-            for (self.items) |item| {
-                items_set.setValue(item, true);
-            }
-
-            for (string) |char| {
-                string_set.setValue(char, true);
-            }
-            items_set.intersectWith(string_set).fillBuffer(inter_buffer);
-            return .{ .items = inter_buffer[0..] };
         }
 
         ///////////////////////
