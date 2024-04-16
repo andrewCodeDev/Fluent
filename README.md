@@ -44,6 +44,7 @@ map          - transforms every elment in the acquired slice with a given unary 
 partition    - partiions the acquired slice based on predicate in stable or unstable manner
 replace      - replaces slice, sequence, or any at left, right, periphery or all
 reverse      - reverses the acquired slice
+rotate       - rotates the array by both negative and positive amounts
 setAt        - sets a given position with a provided value using index wrapping
 shuffle      - randomly shuffles the acquired slice
 sort         - sorts the range in ascending or descending order
