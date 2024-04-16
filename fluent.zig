@@ -279,6 +279,36 @@ fn ImmutableBackend(comptime Self: type) type {
             return rdx;
         }
 
+        pub fn concat(
+            self: Self, 
+            items: []const Self.DataType, 
+            concat_buffer: []Self.DataType,
+        ) FluentInterface(Self.DataType, false) {
+            // std.debug.assert(self.items.len + items.len <= concat_buffer.len);
+            var concat_index: usize = self.items.len;
+            @memcpy(concat_buffer[0..self.items.len], self.items);
+            @memcpy(concat_buffer[concat_index..][0..items.len], items);
+            concat_index += items.len;
+            return .{ .items = concat_buffer[0..concat_index] };
+        }
+
+        pub fn join(
+            self: Self,
+            collection: []const []const Self.DataType,
+            join_buffer: []Self.DataType,
+        ) FluentInterface(Self.DataType, false) {
+            std.debug.assert(self.items.len < join_buffer.len);
+            var curr_idx: usize = self.items.len;
+
+            @memcpy(join_buffer[0..self.items.len], self.items);
+            for (collection) |items| {
+                std.debug.assert(curr_idx + items.len <= join_buffer.len);
+                @memcpy(join_buffer[curr_idx..][0..items.len], items);
+                curr_idx += items.len;
+            }
+            return .{ .items = join_buffer[0..curr_idx] };
+        }
+
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
@@ -455,28 +485,6 @@ fn MutableBackend(comptime Self: type) type {
         pub fn copy(self: Self, items: []const Self.DataType) Self {
             @memcpy(self.items, items);
             return self;
-        }
-
-        pub fn concat(self: Self, items: []const Self.DataType, concat_buffer: []Self.DataType) Self {
-            // std.debug.assert(self.items.len + items.len <= concat_buffer.len);
-            var concat_index: usize = self.items.len;
-            @memcpy(concat_buffer[0..self.items.len], self.items);
-            @memcpy(concat_buffer[concat_index..][0..items.len], items);
-            concat_index += items.len;
-            return .{ .items = concat_buffer[0..concat_index] };
-        }
-
-        pub fn join(self: Self, collection: []const []const Self.DataType, join_buffer: []Self.DataType) Self {
-            std.debug.assert(self.items.len < join_buffer.len);
-            var curr_idx: usize = self.items.len;
-
-            @memcpy(join_buffer[0..self.items.len], self.items);
-            for (collection) |items| {
-                std.debug.assert(curr_idx + items.len <= join_buffer.len);
-                @memcpy(join_buffer[curr_idx..][0..items.len], items);
-                curr_idx += items.len;
-            }
-            return .{ .items = join_buffer[0..curr_idx] };
         }
 
         pub fn partition(self: Self, comptime opt: StabilityOption, predicate: fn (Self.DataType) bool) Self {
