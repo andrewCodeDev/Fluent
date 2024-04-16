@@ -22,12 +22,14 @@ endsWith     - checks if the acquired slice ends with a scalar, sequence, or any
 find         - returns first index of scalar, slice, or any
 findFrom     - returns first index after a given position of scalar, slice, or any
 getAt        - returns an element for given positive or negative index
+mapReduce    - applies unary function and reduces on intial value and binary function
 max          - returns an optional maximum value from the acquired slice
 min          - returns an optional minimum value from the acquired slice
 none         - check if no elements of the acquired slice are true by given predicate
 product      - returns the product of all elements or zero if slice is empty
 print        - prints the acquired slice based on a given format string
 order        - returns the lexicographical order compared to a given slice
+reduce       - returns a reduction based on an intial value and binary function
 slice        - chainable slicing operation for acquired slice
 startsWith   - checks if the acquired slice starts with a scalar, sequence, or any
 sample       - randomly samples a range from the acquired slice given a size
