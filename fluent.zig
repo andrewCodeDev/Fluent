@@ -253,6 +253,32 @@ fn ImmutableBackend(comptime Self: type) type {
             return self.items[start..][0..size];
         }
 
+        pub fn reduce(self: Self, 
+            comptime reduce_type: type,
+            comptime binary_func: anytype, 
+            initial: reduce_type,
+        ) reduce_type {
+            var rdx = initial;
+            for (self.items) |x| {
+                rdx = @call(.always_inline, binary_func, .{ rdx, x });
+            }
+            return rdx;
+        }
+
+        pub fn mapReduce(self: Self, 
+            comptime reduce_type: type,
+            comptime unary_func: anytype,
+            comptime binary_func: anytype, 
+            initial: reduce_type,
+        ) reduce_type {
+            var rdx = initial;
+            for (self.items) |x| {
+                const y = @call(.always_inline, unary_func, .{ x });
+                rdx = @call(.always_inline, binary_func, .{ rdx, y });
+            }
+            return rdx;
+        }
+
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
@@ -2427,4 +2453,36 @@ test "filter                                  : ConstSelf" {
     }
 
     try expect(std.mem.eql(u8, buffer[0..pos], "12345"));
+}
+////////////////////////////////////////////////////////////////////////////////
+
+test "reduce                                  : ConstSelf" {
+
+    const all_g = struct {
+        fn call(a: bool, b: anytype) bool { return a and (b == 'g'); }
+    }.call;
+
+    const has_g = struct {
+        fn call(a: bool, b: anytype) bool { return a or (b == 'g'); }
+    }.call;
+
+    const all_result = init("abcdefg").reduce(bool, all_g, true);
+    const has_result = init("abcdefg").reduce(bool, has_g, false);
+
+    try expect(!all_result);
+    try expect(has_result);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "mapReduce                                 : ConstSelf" {
+
+    const has_g = struct {
+        fn call(a: bool, b: anytype) bool { return a or (b == 'g'); }
+    }.call;
+
+    const has_result = init("ABCDEFG")
+            .mapReduce(bool, std.ascii.toLower, has_g, false);
+
+    try expect(has_result);
 }
