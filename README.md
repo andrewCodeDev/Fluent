@@ -28,7 +28,7 @@ none         - check if no elements of the acquired slice are true by given pred
 product      - returns the product of all elements or zero if slice is empty
 print        - prints the acquired slice based on a given format string
 order        - returns the lexicographical order compared to a given slice
-slice        - chainable sliceing operation for acquired slice
+slice        - chainable slicing operation for acquired slice
 startsWith   - checks if the acquired slice starts with a scalar, sequence, or any
 sample       - randomly samples a range from the acquired slice given a size
 sum          - returns the sum of all elements or zero if slice is empty
