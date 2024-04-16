@@ -171,7 +171,7 @@ fn ImmutableBackend(comptime Self: type) type {
             };
         }
 
-        /// supported opt = {all, leading/left, trailing/right, until, both/around, inside, inverse}
+        /// supported opt = {all, leading, trailing, until, periphery, inside, inverse}
         pub fn count(self: Self, opt: CountOption, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
             if (self.items.len == 0) return 0;
 
@@ -463,8 +463,8 @@ fn MutableBackend(comptime Self: type) type {
 
         pub fn trim(self: Self, comptime direction: DirectionOption, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) Self {
             if (self.items.len <= 1) return self;
-            const start: usize = if (direction == .left or direction == .both) trimLeft(self, opt, actor) else 0;
-            const end: usize = if (direction == .right or direction == .both) trimRight(self, opt, actor) else self.items.len;
+            const start: usize = if (direction == .left or direction == .periphery) trimLeft(self, opt, actor) else 0;
+            const end: usize = if (direction == .right or direction == .periphery) trimRight(self, opt, actor) else self.items.len;
             return .{ .items = self.items[start..end] };
         }
 
@@ -497,9 +497,9 @@ fn MutableBackend(comptime Self: type) type {
         pub fn replace(self: Self, opt: ReplaceOption, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
             if (self.items.len == 0) return self;
             if (opt == .all) return replaceAll(self, mode, this, with);
-            if (opt == .first or opt == .both)
+            if (opt == .first or opt == .periphery)
                 _ = replaceFirst(self, mode, this, with);
-            if (opt == .last or opt == .both)
+            if (opt == .last or opt == .periphery)
                 _ = replaceLast(self, mode, this, with);
             return .{ .items = self.items[0..] };
         }
@@ -854,13 +854,13 @@ const ReplaceOption = enum {
     first,
     last,
     all,
-    both,
+    periphery,
 };
 
 const DirectionOption = enum {
     left,
     right,
-    both,
+    periphery,
 };
 
 const TrimOptions = enum {
@@ -2062,7 +2062,7 @@ test "trim(self, opt, kind, actor)             : scalar" {
     {
         const result = init(buffer[0..source.len])
             .copy(source)
-            .trim(.both, .scalar, ' ');
+            .trim(.periphery, .scalar, ' ');
         try expect(result.equal(source[5 .. source.len - 5]));
     }
 }
@@ -2090,7 +2090,7 @@ test "trim(self, opt, kind, actor)             : predicate" {
     {
         const result = init(buffer[0..source.len])
             .copy(source)
-            .trim(.both, .predicate, std.ascii.isWhitespace);
+            .trim(.periphery, .predicate, std.ascii.isWhitespace);
         try expect(result.equal(source[5 .. source.len - 5]));
     }
 }
@@ -2119,7 +2119,7 @@ test "trim(self, opt, kind, actor)             : set" {
     {
         const result = init(buffer[0..source.len])
             .copy(source)
-            .trim(.both, .any, set[0..]);
+            .trim(.periphery, .any, set[0..]);
         try expect(result.equal(source[5 .. source.len - 5]));
     }
 }
@@ -2217,7 +2217,7 @@ test "replace(self, opt, mode, this, with)     : scalar" {
     {
         const result = init(buffer[0..string.len])
             .copy(string)
-            .replace(.both, .scalar, 'a', 'z');
+            .replace(.periphery, .scalar, 'a', 'z');
         try expect(result.equal("zbcabczbc"));
     }
 
@@ -2252,7 +2252,7 @@ test "replace(self, opt, mode, this, with)     : sequence" {
     {
         const result = init(buffer[0..string.len])
             .copy(string)
-            .replace(.both, .sequence, "abc", "000");
+            .replace(.periphery, .sequence, "abc", "000");
         try expect(result.equal("000abc000"));
     }
 
@@ -2287,7 +2287,7 @@ test "replace(self, opt, mode, this, with)     : any" {
     {
         const result = init(buffer[0..string.len])
             .copy(string)
-            .replace(.both, .any, "abc", "Zig");
+            .replace(.periphery, .any, "abc", "Zig");
         try expect(result.equal("Zbcabcabg"));
     }
 
