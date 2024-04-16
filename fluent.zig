@@ -241,6 +241,18 @@ fn ImmutableBackend(comptime Self: type) type {
             return self;
         }
 
+        pub fn sample(self: Self, random: std.Random, size: usize) []const Self.DataType {
+
+            std.debug.assert(size <= self.items.len);
+
+            if (size == self.items.len)
+                return self.items;
+
+            const start = random.intRangeAtMost(usize, 0, self.items.len - size);
+
+            return self.items[start..][0..size];
+        }
+
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
@@ -379,18 +391,6 @@ fn ImmutableBackend(comptime Self: type) type {
             }
             return (result);
         }
-
-        pub fn sample(self: Self, random: std.Random, size: usize) []const Self.DataType {
-
-            std.debug.assert(size <= self.items.len);
-
-            if (size == self.items.len)
-                return self.items;
-
-            const start = random.intRangeAtMost(usize, 0, self.items.len - size);
-
-            return self.items[start..][0..size];
-        }
     };
 }
 
@@ -506,6 +506,11 @@ fn MutableBackend(comptime Self: type) type {
 
         pub fn map(self: Self, f: fn (Self.DataType) Self.DataType) Self {
             for (self.items) |*x| x.* = @call(.always_inline, f, .{x.*});
+            return self;
+        }
+
+        fn shuffle(self: Self, random: std.Random) Self {
+            random.shuffle(Self.DataType, self.items);
             return self;
         }
 
@@ -695,11 +700,6 @@ fn MutableBackend(comptime Self: type) type {
                     }
                 },
             }
-            return self;
-        }
-
-        fn shuffle(self: Self, random: std.Random) Self {
-            random.shuffle(Self.DataType, self.items);
             return self;
         }
     };
