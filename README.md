@@ -48,7 +48,6 @@ setAt        - sets a given position with a provided value using index wrapping
 shuffle      - randomly shuffles the acquired slice
 sort         - sorts the range in ascending or descending order
 trim         - trims left, right, periphery of scalar, sequence, any
-
 ```
 
 ### String Backend:
@@ -74,13 +73,12 @@ lower       - transform all alphabetic characters to lower case
 upper       - transform all alphabetic characters to upper case
 capitalize  - transform first character to upper case and rest to lower case
 title       - capitalize each sequence separated by spaces
-
 ```
 ### Iterator Support:
 
 ```
-  filter      - only return elements where predicate is true
-  split       - splits a sequence on a given delimiter
-  tokenize    - tokenizes a sequence on a given delimiter  
-  window      - chunks a sequence in a given window size
+filter      - only return elements where predicate is true
+split       - splits a sequence on a given delimiter
+tokenize    - tokenizes a sequence on a given delimiter  
+window      - chunks a sequence in a given window size
 ```
