@@ -84,11 +84,15 @@ fn ImmutableBackend(comptime Self: type) type {
         ///////////////////////
 
         pub fn all(self: Self, predicate: fn (Self.DataType) bool) bool {
-            return for (self.items) |x| { if (!predicate(x)) break false; } else true;            
+            return for (self.items) |x| {
+                if (!predicate(x)) break false;
+            } else true;
         }
 
         pub fn none(self: Self, predicate: fn (Self.DataType) bool) bool {
-            return for (self.items) |x| { if (predicate(x)) break false; } else true;
+            return for (self.items) |x| {
+                if (predicate(x)) break false;
+            } else true;
         }
 
         pub fn findFrom(
@@ -215,12 +219,10 @@ fn ImmutableBackend(comptime Self: type) type {
         }
 
         pub fn min(self: Self) ?Self.DataType {
-            return if (self.items.len == 0) null else
-                @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Min, minGeneric, self.items, reduceInit(ReduceOp.Min, Self.DataType) });
+            return if (self.items.len == 0) null else @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Min, minGeneric, self.items, reduceInit(ReduceOp.Min, Self.DataType) });
         }
         pub fn max(self: Self) ?Self.DataType {
-            return if (self.items.len == 0) null else
-                @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, maxGeneric, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
+            return if (self.items.len == 0) null else @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, maxGeneric, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
         }
 
         pub fn write(self: Self, out_buffer: []Self.DataType) Self {
@@ -237,12 +239,11 @@ fn ImmutableBackend(comptime Self: type) type {
             const writer = stderr.writer();
             std.debug.getStderrMutex().lock();
             defer std.debug.getStderrMutex().unlock();
-            writer.print(format, .{ self.items }) catch {};
+            writer.print(format, .{self.items}) catch {};
             return self;
         }
 
         pub fn sample(self: Self, random: std.Random, size: usize) []const Self.DataType {
-
             std.debug.assert(size <= self.items.len);
 
             if (size == self.items.len)
@@ -253,9 +254,10 @@ fn ImmutableBackend(comptime Self: type) type {
             return self.items[start..][0..size];
         }
 
-        pub fn reduce(self: Self, 
+        pub fn reduce(
+            self: Self,
             comptime reduce_type: type,
-            comptime binary_func: anytype, 
+            comptime binary_func: anytype,
             initial: reduce_type,
         ) reduce_type {
             var rdx = initial;
@@ -265,15 +267,16 @@ fn ImmutableBackend(comptime Self: type) type {
             return rdx;
         }
 
-        pub fn mapReduce(self: Self, 
+        pub fn mapReduce(
+            self: Self,
             comptime reduce_type: type,
             comptime unary_func: anytype,
-            comptime binary_func: anytype, 
+            comptime binary_func: anytype,
             initial: reduce_type,
         ) reduce_type {
             var rdx = initial;
             for (self.items) |x| {
-                const y = @call(.always_inline, unary_func, .{ x });
+                const y = @call(.always_inline, unary_func, .{x});
                 rdx = @call(.always_inline, binary_func, .{ rdx, y });
             }
             return rdx;
@@ -512,10 +515,11 @@ fn MutableBackend(comptime Self: type) type {
         pub usingnamespace ImmutableBackend(Self);
 
         pub fn sort(self: Self, comptime direction: SortDirection) Self {
+            const func = if (direction == .ascending)
+                std.sort.asc(Self.DataType)
+            else
+                std.sort.desc(Self.DataType);
 
-            const func = if (direction == .ascending) 
-                std.sort.asc(Self.DataType) else std.sort.desc(Self.DataType);
-            
             std.sort.pdq(Self.DataType, self.items, void{}, func);
             return self;
         }
@@ -791,20 +795,43 @@ fn ImmutableStringBackend(comptime Self: type) type {
         pub fn digit(self: Self, comptime T: type) ?T {
             if (comptime !isInteger(T))
                 @compileError("digit: requires integer type.");
-            
+
             return std.fmt.parseInt(T, self.items, 10) catch null;
         }
 
         pub fn float(self: Self, comptime T: type) ?T {
             if (comptime !isFloat(T))
                 @compileError("float: requires floating-point type.");
-            
+
             return std.fmt.parseFloat(T, self.items) catch null;
+        }
+
+        pub fn getToken(self: Self, nth: usize, charset: []const u8) Self {
+            var bitset = StringBitSet.init();
+            var start: usize = 0;
+            var end: usize = 0;
+            for (charset) |item| {
+                bitset.setValue(item, true);
+            }
+            for (0..nth) |_| {
+                start = end;
+                while (start < self.items.len and bitset.isSet(self.items[start])) {
+                    start += 1;
+                }
+                if (start >= self.items.len)
+                    return .{ .items = self.items[end..] };
+                end = start;
+                while (end < self.items.len and !bitset.isSet(self.items[end])) {
+                    end += 1;
+                }
+            }
+            return .{ .items = self.items[start..end] };
         }
 
         ///////////////////////
         //  PRIVATE SECTION  //
         ///////////////////////
+
     };
 }
 
@@ -864,11 +891,136 @@ fn MutableStringBackend(comptime Self: type) type {
             return self;
         }
 
+        pub fn differenceWith(self: Self, string: []const u8, diff_buffer: []u8) Self {
+            var items_set = StringBitSet.init();
+            var string_set = StringBitSet.init();
+
+            for (self.items) |item| {
+                items_set.setValue(item, true);
+            }
+
+            for (string) |char| {
+                string_set.setValue(char, true);
+            }
+            items_set.differenceWith(string_set).fillBuffer(diff_buffer);
+            return .{ .items = diff_buffer[0..] };
+        }
+
+        pub fn unionWith(self: Self, string: []const u8, union_buffer: []u8) Self {
+            var items_set = StringBitSet.init();
+            var string_set = StringBitSet.init();
+
+            for (self.items) |item| {
+                items_set.setValue(item, true);
+            }
+
+            for (string) |char| {
+                string_set.setValue(char, true);
+            }
+            items_set.unionWith(string_set).fillBuffer(union_buffer);
+            return .{ .items = union_buffer[0..] };
+        }
+
+        pub fn intersectWith(self: Self, string: []const u8, inter_buffer: []u8) Self {
+            var items_set = StringBitSet.init();
+            var string_set = StringBitSet.init();
+
+            for (self.items) |item| {
+                items_set.setValue(item, true);
+            }
+
+            for (string) |char| {
+                string_set.setValue(char, true);
+            }
+            items_set.intersectWith(string_set).fillBuffer(inter_buffer);
+            return .{ .items = inter_buffer[0..] };
+        }
+
         ///////////////////////
         //  PRIVATE SECTION  //
         ///////////////////////
+
     };
 }
+
+//////////////////////////////////////////////////////////////////////////////////
+// STRING BIT SET :                                                         //
+//////////////////////////////////////////////////////////////////////////////////
+
+const StringBitSet = struct {
+    const BackingSet = std.StaticBitSet(@bitSizeOf(usize));
+
+    bits: [4]BackingSet,
+
+    pub fn init() StringBitSet {
+        return .{ .bits = .{
+            BackingSet.initEmpty(),
+            BackingSet.initEmpty(),
+            BackingSet.initEmpty(),
+            BackingSet.initEmpty(),
+        } };
+    }
+
+    pub fn setValue(self: *StringBitSet, pos: usize, value: bool) void {
+        const mod_pos = pos & 63;
+        switch (pos) {
+            0...63 => self.bits[0].setValue(mod_pos, value),
+            64...127 => self.bits[1].setValue(mod_pos, value),
+            128...191 => self.bits[2].setValue(mod_pos, value),
+            192...255 => self.bits[3].setValue(mod_pos, value),
+            else => unreachable,
+        }
+    }
+    pub fn isSet(self: *const StringBitSet, pos: usize) bool {
+        const mod_pos = pos & 63;
+        return switch (pos) {
+            0...63 => self.bits[0].isSet(mod_pos),
+            64...127 => self.bits[1].isSet(mod_pos),
+            128...191 => self.bits[2].isSet(mod_pos),
+            192...255 => self.bits[3].isSet(mod_pos),
+            else => unreachable,
+        };
+    }
+    pub fn unionWith(self: StringBitSet, other: StringBitSet) StringBitSet {
+        return .{ .bits = .{
+            self.bits[0].unionWith(other.bits[0]),
+            self.bits[1].unionWith(other.bits[1]),
+            self.bits[2].unionWith(other.bits[2]),
+            self.bits[3].unionWith(other.bits[3]),
+        } };
+    }
+    pub fn differenceWith(self: StringBitSet, other: StringBitSet) StringBitSet {
+        return .{ .bits = .{
+            self.bits[0].differenceWith(other.bits[0]),
+            self.bits[1].differenceWith(other.bits[1]),
+            self.bits[2].differenceWith(other.bits[2]),
+            self.bits[3].differenceWith(other.bits[3]),
+        } };
+    }
+    pub fn intersectWith(self: StringBitSet, other: StringBitSet) StringBitSet {
+        return .{ .bits = .{
+            self.bits[0].intersectWith(other.bits[0]),
+            self.bits[1].intersectWith(other.bits[1]),
+            self.bits[2].intersectWith(other.bits[2]),
+            self.bits[3].intersectWith(other.bits[3]),
+        } };
+    }
+
+    pub fn count(self: StringBitSet) usize {
+        return self.bits[0].count() + self.bits[1].count() + self.bits[2].count() + self.bits[3].count();
+    }
+
+    pub fn fillBuffer(self: *const StringBitSet, buffer: []u8) void {
+        var val: usize = 0;
+        var pos: usize = 0;
+        while (val < 256) : (val += 1) {
+            if (self.isSet(val)) {
+                buffer[pos] = @intCast(val);
+                pos += 1;
+            }
+        }
+    }
+};
 
 //////////////////////////////////////////////////////////////////////////////////
 // ENUMERATED OPTIONS :                                                         //
@@ -915,7 +1067,7 @@ const SortDirection = enum {
 
 const SampleOption = enum {
     scalar,
-    sequence,  
+    sequence,
 };
 
 // any, sequence, scalar
@@ -941,13 +1093,15 @@ fn isUnsigned(comptime T: type) bool {
 
 fn isInteger(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Int => true, else => false,
+        .Int => true,
+        else => false,
     };
 }
 
 fn isFloat(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Float => true, else => false,
+        .Float => true,
+        else => false,
     };
 }
 
@@ -1062,13 +1216,8 @@ inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x) {
     return x * y;
 }
 
-fn FilterIterator(
-    comptime T: type,
-    comptime predicate: fn(T) bool
-) type {
-
+fn FilterIterator(comptime T: type, comptime predicate: fn (T) bool) type {
     return struct {
-
         buffer: []const T,
         index: usize,
 
@@ -1941,6 +2090,62 @@ test "isAlnum(self)                            : bool" {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+test "getToken(self, nth, charset)             : Self" {
+    const string = "This: is: a:     string:    with: stuff";
+    const charset = " :";
+    var buffer: [40]u8 = undefined;
+
+    {
+        var result = init(buffer[0..string.len])
+            .copy(string)
+            .getToken(1, charset);
+        try expect(result.equal("This"));
+    }
+
+    {
+        var result = init(buffer[0..string.len])
+            .copy(string)
+            .getToken(2, charset);
+        try expect(result.equal("is"));
+    }
+
+    {
+        var result = init(buffer[0..string.len])
+            .copy(string)
+            .getToken(3, charset);
+        try expect(result.equal("a"));
+    }
+
+    {
+        var result = init(buffer[0..string.len])
+            .copy(string)
+            .getToken(4, charset);
+        try expect(result.equal("string"));
+    }
+    {
+        var result = init(buffer[0..string.len])
+            .copy(string)
+            .getToken(5, charset);
+        try expect(result.equal("with"));
+    }
+
+    {
+        var result = init(buffer[0..string.len])
+            .copy(string)
+            .getToken(6, charset);
+        try expect(result.equal("stuff"));
+    }
+
+    {
+        var result = init(buffer[0..string.len])
+            .copy(string)
+            .getToken(99, charset);
+        try expect(result.equal(""));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // @TEST : MUTABLE BACKEND                                                    //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -2425,6 +2630,54 @@ test "title(self)                              : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+test "differenceWith(self, string, buffer)     : MutSelf" {
+    const string = "abcd";
+    const diff = "abce";
+    var start_buffer: [4]u8 = undefined;
+    var diff_buffer: [1]u8 = undefined;
+
+    {
+        const result = init(start_buffer[0..])
+            .copy(string)
+            .differenceWith(diff, diff_buffer[0..]);
+        try expect(result.equal("d"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "unionWith(self, string, buffer)          : MutSelf" {
+    const string = "abcd";
+    const diff = "abce";
+    var start_buffer: [4]u8 = undefined;
+    var union_buffer: [5]u8 = undefined;
+
+    {
+        const result = init(start_buffer[0..])
+            .copy(string)
+            .unionWith(diff, union_buffer[0..]);
+        try expect(result.equal("abcde"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "intersectWith(self, string, buffer)      : MutSelf" {
+    const string = "abcd";
+    const diff = "abce";
+    var start_buffer: [4]u8 = undefined;
+    var inter_buffer: [3]u8 = undefined;
+
+    {
+        const result = init(start_buffer[0..])
+            .copy(string)
+            .intersectWith(diff, inter_buffer[0..]);
+        try expect(result.equal("abc"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 test "string integer and float parsing        : ConstSelf" {
     {
         const result = init("42").digit(usize) orelse unreachable;
@@ -2451,7 +2704,7 @@ test "string integer and float parsing        : ConstSelf" {
 
 test "filter                                  : ConstSelf" {
     const x = init("1ab2cd3hx45");
-    var buffer: [32]u8 = undefined; 
+    var buffer: [32]u8 = undefined;
 
     var pos: usize = 0;
     var itr = x.filter(std.ascii.isDigit);
@@ -2465,13 +2718,16 @@ test "filter                                  : ConstSelf" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "reduce                                  : ConstSelf" {
-
     const all_g = struct {
-        fn call(a: bool, b: anytype) bool { return a and (b == 'g'); }
+        fn call(a: bool, b: anytype) bool {
+            return a and (b == 'g');
+        }
     }.call;
 
     const has_g = struct {
-        fn call(a: bool, b: anytype) bool { return a or (b == 'g'); }
+        fn call(a: bool, b: anytype) bool {
+            return a or (b == 'g');
+        }
     }.call;
 
     const all_result = init("abcdefg").reduce(bool, all_g, true);
@@ -2484,13 +2740,14 @@ test "reduce                                  : ConstSelf" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "mapReduce                                 : ConstSelf" {
-
     const has_g = struct {
-        fn call(a: bool, b: anytype) bool { return a or (b == 'g'); }
+        fn call(a: bool, b: anytype) bool {
+            return a or (b == 'g');
+        }
     }.call;
 
     const has_result = init("ABCDEFG")
-            .mapReduce(bool, std.ascii.toLower, has_g, false);
+        .mapReduce(bool, std.ascii.toLower, has_g, false);
 
     try expect(has_result);
 }
