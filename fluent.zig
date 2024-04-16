@@ -412,10 +412,12 @@ fn MutableBackend(comptime Self: type) type {
         // includes operations like reduce, find, and iterators
         pub usingnamespace ImmutableBackend(Self);
 
-        pub fn sort(self: Self, comptime opt: SortOption) Self {
-            const SF = SortFunction(Self.DataType);
-            const func = if (opt == .ascending) SF.lessThan else SF.greaterThan;
-            std.sort.block(Self.DataType, self.items, void{}, func);
+        pub fn sort(self: Self, comptime direction: SortDirection) Self {
+
+            const func = if (direction == .ascending) 
+                std.sort.asc(Self.DataType) else std.sort.desc(Self.DataType);
+            
+            std.sort.pdq(Self.DataType, self.items, void{}, func);
             return self;
         }
 
@@ -451,7 +453,7 @@ fn MutableBackend(comptime Self: type) type {
             return .{ .items = join_buffer[0..curr_idx] };
         }
 
-        pub fn partition(self: Self, comptime opt: PartitionOption, predicate: fn (Self.DataType) bool) Self {
+        pub fn partition(self: Self, comptime opt: StabilityOption, predicate: fn (Self.DataType) bool) Self {
             switch (opt) {
                 .stable => stablePartition(Self.DataType, self, predicate),
                 .unstable => unstablePartition(Self.DataType, self, predicate),
@@ -867,12 +869,12 @@ const TrimOptions = enum {
     any,
 };
 
-const PartitionOption = enum {
+const StabilityOption = enum {
     stable,
     unstable,
 };
 
-const SortOption = enum {
+const SortDirection = enum {
     ascending,
     descending,
 };
@@ -888,17 +890,6 @@ pub const FluentMode = std.mem.DelimiterType;
 ////////////////////////////////////////////////////////////////////////////////
 // PRIVATE HELPERS :                                                          //
 ////////////////////////////////////////////////////////////////////////////////
-
-fn SortFunction(comptime T: type) type {
-    return struct {
-        fn lessThan(_: void, x: T, y: T) bool {
-            return x < y;
-        }
-        fn greaterThan(_: void, x: T, y: T) bool {
-            return x > y;
-        }
-    };
-}
 
 fn isConst(comptime T: type) bool {
     switch (@typeInfo(T)) {
@@ -1935,7 +1926,7 @@ test "sort(self, opt)                          : MutSelf" {
         &[_]i32{ 6, 5, 4, 3, 2, 1 },
     };
 
-    const sorting_order = [_]SortOption{
+    const sorting_order = [_]SortDirection{
         .ascending,
         .ascending,
         .ascending,
