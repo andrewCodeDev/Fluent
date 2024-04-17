@@ -190,11 +190,31 @@ fn ImmutableBackend(comptime Self: type) type {
             };
         }
 
-        pub fn slice(self: Self, start: usize, end: usize) Self {
-            const w = wrapRange(self.items.len, start, end);
-            const w_start = w.start;
-            const w_end = w.end;
-            return .{ .items = self.items[w_start..w_end] };
+        pub fn slice(self: Self, i: anytype, j: anytype) Self {
+            const I = @TypeOf(i);
+            const J = @TypeOf(j);
+    
+            if (comptime !isInteger(I) or !isInteger(J))
+                @compileError("slicing requires integer types.");
+
+            // this has extended slicing behaviour similar to python
+            // it can never return an out-of-bounds value, only empty
+            // ranges or values truncated to 0 or items.len
+
+            if (comptime isUnsigned(I) and isUnsigned(I)) {
+                const a: usize = @min(i, self.items.len);
+                const b: usize = @max(a, @min(j, self.items.len));
+                return .{ .items = if (a < b) self.items[a..b] else self.items[0..0] };
+
+            } else if (comptime I != J) { // default to isize version
+                @call(.always_inline, slice, .{ self, @as(isize, @intCast(i)), @as(isize, @intCast(j)) });
+
+            } else {
+                const l: isize = @intCast(self.items.len);
+                const a: usize = wrapIndex(self.items.len, @min(@max(-l, i), l));
+                const b: usize = wrapIndex(self.items.len, @min(@max(-l, j), l));               
+                return .{ .items = if (a < b) self.items[a..b] else self.items[0..0] };
+            }
         }
 
         // NOTE:
@@ -1091,7 +1111,7 @@ fn isUnsigned(comptime T: type) bool {
 
 fn isInteger(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Int => true,
+        .Int, .ComptimeInt => true,
         else => false,
     };
 }
@@ -1131,7 +1151,6 @@ inline fn wrapRange(len: usize, start: usize, end: usize) struct { start: usize,
     if (len == 0) return .{ .start = 0, .end = 0 };
     const wraped_start: usize = if (start > len) 0 else start;
     const wraped_end: usize = if (end > len) len - 1 else end;
-
     if (wraped_start == wraped_end) return .{ .start = 0, .end = len };
     if (wraped_start > wraped_end) return .{ .start = wraped_end, .end = wraped_start };
     return .{ .start = wraped_start, .end = wraped_end };
@@ -1746,21 +1765,30 @@ test "count(self, opt, mode, needle)           : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "slice(self, start, end)                  : [start..end]" {
-    const self = init("000_111_000");
 
-    {
-        const result = self.slice(0, self.items.len);
-        try expect(std.mem.eql(u8, self.items, result.items));
-    }
+    const string: []const u8 = "012_345_678";
+        
+    const self = init(string);
 
-    {
-        const result = self.slice(0, 0);
-        try expect(std.mem.eql(u8, self.items, result.items));
-    }
-
-    {
-        const result = self.slice(self.items.len, 0);
-        try expect(std.mem.eql(u8, self.items, result.items));
+    { // Unsigned:
+        try expect(self.slice(@as(usize, 0), self.items.len).equal(string));
+        try expect(self.slice(self.items.len + 1, self.items.len).items.len == 0);
+        try expect(self.slice(self.items.len, self.items.len).items.len == 0);
+        try expect(self.slice(self.items.len, @as(usize, 5)).items.len == 0);
+        try expect(self.slice(@as(usize, 6), @as(usize, 5)).items.len == 0);
+        try expect(self.slice(@as(usize, 0), @as(usize, 3)).equal(string[0..3]));
+        try expect(self.slice(@as(usize, 4), @as(usize, 7)).equal(string[4..7]));
+    }                
+    { // signed: 
+        try expect(self.slice(@as(isize, -6), @as(isize, -4)).equal("45"));
+        try expect(self.slice(@as(isize, -3), @as(isize, -1)).equal("67"));
+        try expect(self.slice(@as(isize, 5), @as(isize, -4)).equal("45"));
+        try expect(self.slice(@as(isize, 8), @as(isize, -1)).equal("67"));
+        try expect(self.slice(@as(isize, -6), @as(isize, 7)).equal("45"));
+        try expect(self.slice(@as(isize, -3), @as(isize, 10)).equal("67"));
+        try expect(self.slice(@as(isize, 0), @as(isize, -1)).equal(string[0..string.len - 1]));
+        try expect(self.slice(@as(isize, 0), @as(isize, 3)).equal(string[0..3]));
+        try expect(self.slice(@as(isize, 4), @as(isize, 7)).equal(string[4..7]));
     }
 }
 
