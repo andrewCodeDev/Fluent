@@ -210,11 +210,9 @@ fn ImmutableBackend(comptime Self: type) type {
         }
 
         pub fn sum(self: Self) Self.DataType {
-            if (self.items.len == 0) return 0;
             return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Add, addGeneric, self.items, reduceInit(ReduceOp.Add, Self.DataType) });
         }
         pub fn product(self: Self) Self.DataType {
-            if (self.items.len == 0) return 0;
             return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Mul, mulGeneric, self.items, reduceInit(ReduceOp.Mul, Self.DataType) });
         }
 
@@ -1203,16 +1201,16 @@ fn simdReduce(
 }
 
 // these work for @Vector as well as scalar types
-inline fn maxGeneric(x: anytype, y: anytype) @TypeOf(x) {
+inline fn maxGeneric(x: anytype, y: anytype) @TypeOf(x, y) {
     return @max(x, y);
 }
-inline fn minGeneric(x: anytype, y: anytype) @TypeOf(x) {
+inline fn minGeneric(x: anytype, y: anytype) @TypeOf(x, y) {
     return @min(x, y);
 }
-inline fn addGeneric(x: anytype, y: anytype) @TypeOf(x) {
+inline fn addGeneric(x: anytype, y: anytype) @TypeOf(x, y) {
     return x + y;
 }
-inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x) {
+inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x, y) {
     return x * y;
 }
 
@@ -1839,6 +1837,11 @@ test "sum(self)                                : Self.DataType" {
         const result = self.fill(0).sum();
         try expect(result == 0);
     }
+
+    {
+        const result = init(&[_]i32{}).sum();
+        try expect(result == 0);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1854,6 +1857,11 @@ test "product(self)                            : Self.DataType" {
 
     {
         const result = self.fill(1).product();
+        try expect(result == 1);
+    }
+
+    {
+        const result = init(&[_]i32{}).product();
         try expect(result == 1);
     }
 }
