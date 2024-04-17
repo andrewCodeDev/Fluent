@@ -201,7 +201,7 @@ fn ImmutableBackend(comptime Self: type) type {
             // it can never return an out-of-bounds value, only empty
             // ranges or values truncated to 0 or items.len
 
-            if (comptime isUnsigned(I) and isUnsigned(I)) {
+            if (comptime isUnsigned(I) and isUnsigned(J)) {
                 const a: usize = @min(i, self.items.len);
                 const b: usize = @max(a, @min(j, self.items.len));
                 return .{ .items = if (a < b) self.items[a..b] else self.items[0..0] };
