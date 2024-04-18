@@ -939,7 +939,7 @@ fn MutableStringBackend(comptime Self: type) type {
 // STRING BIT SET :                                                         //
 //////////////////////////////////////////////////////////////////////////////////
 
-const StringBitSet = struct {
+pub const StringBitSet = struct {
     const BackingSet = std.StaticBitSet(@bitSizeOf(usize));
 
     bits: [4]BackingSet,
