@@ -3,6 +3,8 @@ const Child = std.meta.Child;
 const Order = std.math.Order;
 const ReduceOp = std.builtin.ReduceOp;
 const math = std.math;
+// name disambiguation
+const Fluent = @This();
 
 ////////////////////////////////////////////////////////////////////////////////
 // Public Access Point                                                       ///
@@ -45,15 +47,15 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
 // chain: combine multiple unary functions into a single in-order call 
 
 pub fn chain(
-    comptime map_type: type,
     comptime unary_tuple: anytype
-) fn (map_type) map_type {
-
+) type {
     return struct {
-        pub fn call(x: map_type) map_type {
+        pub const functions = unary_tuple;
+        // this doesn't get deduced in some cases - only deduced when call is used
+        pub fn call(x: anytype) @TypeOf(@call(.auto, unwrap, .{ 0, unary_tuple, default(@TypeOf(x)) })) {
             return @call(.always_inline, unwrap, .{ 0, unary_tuple, x });
         }
-    }.call;
+    };
 } 
 
 fn unwrap(
@@ -81,8 +83,8 @@ pub fn bind(
     comptime function: anytype,
 ) bindReturn(bind_tuple, function) {
 
-    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
     const bind_count = comptime tupleSize(bind_tuple);
+    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
 
     if (comptime total_count - bind_count == 1) {
         return struct {
@@ -287,17 +289,17 @@ fn ImmutableBackend(comptime Self: type) type {
         }
 
         pub fn sum(self: Self) Self.DataType {
-            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Add, addGeneric, self.items, reduceInit(ReduceOp.Add, Self.DataType) });
+            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Add, add, self.items, reduceInit(ReduceOp.Add, Self.DataType) });
         }
         pub fn product(self: Self) Self.DataType {
-            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Mul, mulGeneric, self.items, reduceInit(ReduceOp.Mul, Self.DataType) });
+            return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Mul, mul, self.items, reduceInit(ReduceOp.Mul, Self.DataType) });
         }
 
         pub fn min(self: Self) ?Self.DataType {
-            return if (self.items.len == 0) null else @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Min, minGeneric, self.items, reduceInit(ReduceOp.Min, Self.DataType) });
+            return if (self.items.len == 0) null else @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Min, Fluent.min, self.items, reduceInit(ReduceOp.Min, Self.DataType) });
         }
         pub fn max(self: Self) ?Self.DataType {
-            return if (self.items.len == 0) null else @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, maxGeneric, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
+            return if (self.items.len == 0) null else @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, Fluent.max, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
         }
 
         pub fn write(self: Self, out_buffer: []Self.DataType) Self {
@@ -399,7 +401,7 @@ fn ImmutableBackend(comptime Self: type) type {
 
         pub fn filter(
             self: Self,
-            comptime predicate: fn (Self.DataType) bool,
+            comptime predicate: anytype,
         ) FilterIterator(Self.DataType, predicate) {
             return .{ .index = 0, .buffer = self.items };
         }
@@ -654,8 +656,19 @@ fn MutableBackend(comptime Self: type) type {
             return .{ .items = self.items[0..] };
         }
 
-        pub fn map(self: Self, f: fn (Self.DataType) Self.DataType) Self {
-            for (self.items) |*x| x.* = @call(.always_inline, f, .{x.*});
+        pub fn map(self: Self, unary_func: anytype) Self {
+
+            const U = @TypeOf(unary_func);
+
+            switch (@typeInfo(U)) {
+                .Fn => { 
+                    for (self.items) |*x| x.* = @call(.always_inline, unary_func, .{x.*}); 
+                },
+                else => {
+                    for (self.items) |*x| x.* = @call(.always_inline, unary_func.call, .{x.*});
+                }
+            }
+            
             return self;
         }
 
@@ -1182,6 +1195,9 @@ pub fn tupleSize(comptime tuple: anytype) usize {
 }
 
 fn default(comptime T: type) T {
+    if (comptime T == bool) {
+        return true;
+    }
     return 0;
 }
 
@@ -1289,29 +1305,42 @@ fn simdReduce(
 }
 
 // these work for @Vector as well as scalar types
-inline fn maxGeneric(x: anytype, y: anytype) @TypeOf(x, y) {
+pub inline fn max(x: anytype, y: anytype) @TypeOf(x, y) {
     return @max(x, y);
 }
-inline fn minGeneric(x: anytype, y: anytype) @TypeOf(x, y) {
+pub inline fn min(x: anytype, y: anytype) @TypeOf(x, y) {
     return @min(x, y);
 }
-inline fn addGeneric(x: anytype, y: anytype) @TypeOf(x, y) {
+pub inline fn add(x: anytype, y: anytype) @TypeOf(x, y) {
     return x + y;
 }
-inline fn mulGeneric(x: anytype, y: anytype) @TypeOf(x, y) {
+pub inline fn mul(x: anytype, y: anytype) @TypeOf(x, y) {
     return x * y;
 }
 
-fn FilterIterator(comptime T: type, comptime predicate: fn (T) bool) type {
-    return struct {
+fn FilterIterator(comptime T: type, comptime predicate: anytype) type {
+    return struct {        
         buffer: []const T,
         index: usize,
 
         pub fn next(self: *@This()) ?T {
-            // advance to find the next qualifying element
-            while (self.index < self.buffer.len and !predicate(self.buffer[self.index])) {
-                self.index += 1;
+
+            switch (@typeInfo(@TypeOf(predicate))) {
+                .Fn => {
+                    while (self.index < self.buffer.len and !predicate(self.buffer[self.index])) {
+                        self.index += 1;
+                    }
+                },
+                else => outer: {
+                    inner: while (self.index < self.buffer.len) : (self.index += 1){
+                        inline for (predicate.functions) |p| {
+                            if (!p(self.buffer[self.index])) continue :inner;     
+                        }
+                        break :outer;
+                    }
+                }
             }
+            
             // return qualifying element if in range
             if (self.index < self.buffer.len) {
                 defer self.index += 1;
