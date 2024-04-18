@@ -41,26 +41,83 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
 // UNARY FUNCTION ADAPTER :                                                   //
 ////////////////////////////////////////////////////////////////////////////////
 
-// Used to determine what the return type of a function is
-// since all scalar types are coercible from comptime int 0.
-// Specifically helpful for the case of anytype and
-// @TypeOf(arg) return types.
+//////////////////////////////////////////////////////////////////////
+// chain: combine multiple unary functions into a single in-order call 
 
-fn DefaultArg(comptime T: type) T {
-    return 0;
-}
-
-pub fn adapt(
-    comptime argument_type: type,
-    comptime function: anytype,
-) fn (argument_type) @TypeOf(function(DefaultArg(argument_type))) {
-    const return_type = @TypeOf(function(DefaultArg(argument_type)));
+pub fn chain(
+    comptime map_type: type,
+    comptime unary_tuple: anytype
+) fn (map_type) map_type {
 
     return struct {
-        pub fn call(x: argument_type) return_type {
-            return @call(.always_inline, function, .{x});
+        pub fn call(x: map_type) map_type {
+            return @call(.always_inline, unwrap, .{ 0, unary_tuple, x });
         }
     }.call;
+} 
+
+fn unwrap(
+    comptime pos: usize,
+    comptime unary_tuple: anytype,
+    arg: anytype,
+) if (pos < tupleSize(unary_tuple))
+    @TypeOf(unary_tuple[pos](default(@TypeOf(arg)))) else @TypeOf(arg)
+{
+    // this is a forward-unwrap that passes
+    // outcomes of one function to the next
+    if (comptime pos == tupleSize(unary_tuple)) {
+        return arg;
+    }
+    return @call(.always_inline, unwrap, .{ 
+        (pos + 1), unary_tuple, @call(.always_inline, unary_tuple[pos], .{ arg })
+    });
+}
+
+//////////////////////////////////////////////////////////////////////
+// bind: affix comptime arguments to the front of a function 
+
+pub fn bind(
+    comptime bind_tuple: anytype,
+    comptime function: anytype,
+) bindReturn(bind_tuple, function) {
+
+    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
+    const bind_count = comptime tupleSize(bind_tuple);
+
+    if (comptime total_count - bind_count == 1) {
+        return struct {
+            pub fn call(x: anytype) @TypeOf(x) {
+                return @call(.always_inline, function, bind_tuple ++ .{x});
+            }
+        }.call;
+    } else {
+        return struct {
+            pub fn call(x: anytype, y: anytype) @TypeOf(x) {
+                return @call(.always_inline, function, bind_tuple ++ .{x, y});
+            }
+        }.call;
+    }
+}
+
+fn bindReturn(
+    comptime bind_tuple: anytype,
+    comptime function: anytype,
+) type {
+    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
+    const bind_count = comptime tupleSize(bind_tuple);
+
+    if (comptime total_count < bind_count)
+        @compileError("too many arguments to bind");
+
+    if (comptime total_count - bind_count > 2)
+        @compileError("fluent bind must result in unary or binary function");
+
+    const choices = struct {
+      pub fn unary(x: anytype) @TypeOf(x) { return x; }
+      pub fn binary(x: anytype, y: anytype) @TypeOf(x) { _ = &y; return x; }
+    };
+    return if (comptime (total_count - bind_count) == 1)
+        @TypeOf(choices.unary) else @TypeOf(choices.binary);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -548,8 +605,9 @@ fn MutableBackend(comptime Self: type) type {
         }
 
         pub fn copy(self: Self, items: []const Self.DataType) Self {
-            @memcpy(self.items, items);
-            return self;
+            std.debug.assert(self.items.len >= items.len);
+            @memcpy(self.items[0..items.len], items);
+            return .{ .items = self.items[0..items.len] };
         }
 
         pub fn partition(self: Self, comptime opt: StabilityOption, predicate: fn (Self.DataType) bool) Self {
@@ -1102,6 +1160,13 @@ fn isConst(comptime T: type) bool {
     }
 }
 
+fn isInteger(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .Int, .ComptimeInt => true,
+        else => false,
+    };
+}
+
 fn isUnsigned(comptime T: type) bool {
     return switch (@typeInfo(T)) {
         .Int => |i| i.signedness == .unsigned,
@@ -1109,11 +1174,15 @@ fn isUnsigned(comptime T: type) bool {
     };
 }
 
-fn isInteger(comptime T: type) bool {
-    return switch (@typeInfo(T)) {
-        .Int, .ComptimeInt => true,
-        else => false,
+pub fn tupleSize(comptime tuple: anytype) usize {
+    return switch (@typeInfo(@TypeOf(tuple))) {
+        .Struct => |s| s.fields.len,
+        else => @compileError("type must be a tuple"),
     };
+}
+
+fn default(comptime T: type) T {
+    return 0;
 }
 
 fn isFloat(comptime T: type) bool {
