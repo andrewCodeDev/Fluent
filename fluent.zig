@@ -351,10 +351,23 @@ fn ImmutableBackend(comptime Self: type) type {
             comptime binary_func: anytype,
             initial: reduce_type,
         ) reduce_type {
+            
             var rdx = initial;
-            for (self.items) |x| {
-                const y = @call(.always_inline, unary_func, .{x});
-                rdx = @call(.always_inline, binary_func, .{ rdx, y });
+
+            switch (@typeInfo(@TypeOf(unary_func))) {
+                .Fn => {
+                    for (self.items) |x| {
+                        const y = @call(.always_inline, unary_func, .{x});
+                        rdx = @call(.always_inline, binary_func, .{ rdx, y });
+                    }
+                },
+                else => {
+                    const chained = comptime chain(unary_func);
+                    for (self.items) |x| {
+                        const y = @call(.always_inline, chained.call, .{x});
+                        rdx = @call(.always_inline, binary_func, .{ rdx, y });
+                    }
+                }
             }
             return rdx;
         }
@@ -420,6 +433,13 @@ fn ImmutableBackend(comptime Self: type) type {
             delimiter: Parameter(Self.DataType, mode),
         ) std.mem.TokenIterator(Self.DataType, mode) {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
+        }
+
+        pub fn transform(
+            self: Self,
+            comptime unary: anytype,
+        ) TransformIterator(Self.DataType, unary) {
+            return .{ .index = 0, .buffer = self.items };
         }
 
         pub fn window(
@@ -656,16 +676,17 @@ fn MutableBackend(comptime Self: type) type {
             return .{ .items = self.items[0..] };
         }
 
-        pub fn map(self: Self, unary_func: anytype) Self {
+        pub fn map(self: Self, unary: anytype) Self {
 
-            const U = @TypeOf(unary_func);
+            const U = @TypeOf(unary);
 
             switch (@typeInfo(U)) {
                 .Fn => { 
-                    for (self.items) |*x| x.* = @call(.always_inline, unary_func, .{x.*}); 
+                    for (self.items) |*x| x.* = @call(.always_inline, unary, .{x.*}); 
                 },
                 else => {
-                    for (self.items) |*x| x.* = @call(.always_inline, unary_func.call, .{x.*});
+                    const chained = comptime Fluent.chain(unary);
+                    for (self.items) |*x| x.* = @call(.always_inline, chained.call, .{x.*});
                 }
             }
             
@@ -1314,8 +1335,17 @@ pub inline fn min(x: anytype, y: anytype) @TypeOf(x, y) {
 pub inline fn add(x: anytype, y: anytype) @TypeOf(x, y) {
     return x + y;
 }
+pub inline fn sub(x: anytype, y: anytype) @TypeOf(x, y) {
+    return x - y;
+}
+pub inline fn div(x: anytype, y: anytype) @TypeOf(x, y) {
+    return x / y;
+}
 pub inline fn mul(x: anytype, y: anytype) @TypeOf(x, y) {
     return x * y;
+}
+pub inline fn negate(x: anytype) @TypeOf(x) {
+    return -x;
 }
 
 fn FilterIterator(comptime T: type, comptime predicate: anytype) type {
@@ -1333,7 +1363,7 @@ fn FilterIterator(comptime T: type, comptime predicate: anytype) type {
                 },
                 else => outer: {
                     inner: while (self.index < self.buffer.len) : (self.index += 1){
-                        inline for (predicate.functions) |p| {
+                        inline for (predicate) |p| {
                             if (!p(self.buffer[self.index])) continue :inner;     
                         }
                         break :outer;
@@ -1347,6 +1377,37 @@ fn FilterIterator(comptime T: type, comptime predicate: anytype) type {
                 return self.buffer[self.index];
             }
             return null;
+        }
+    };
+}
+
+fn TransformIterator(comptime T: type, comptime unary: anytype) type {
+    return struct {        
+        buffer: []const T,
+        index: usize,
+        
+        pub fn next(self: *@This()) ?T {
+            const U = @TypeOf(unary);
+
+            return switch (@typeInfo(U)) {
+                .Fn => { 
+                    // return qualifying element if in range
+                    if (self.index < self.buffer.len) {
+                        defer self.index += 1;
+                        return unary(self.buffer[self.index]);
+                    }
+                    return null;
+
+                },
+                else => {
+                    const chained = comptime Fluent.chain(unary);
+                    if (self.index < self.buffer.len) {
+                        defer self.index += 1;
+                        return chained.call(self.buffer[self.index]);
+                    }
+                    return null;
+                }
+            };
         }
     };
 }
