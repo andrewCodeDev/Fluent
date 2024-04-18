@@ -1097,7 +1097,7 @@ fn isFloat(comptime T: type) bool {
     };
 }
 
-fn Parameter(comptime T: type, comptime mode: anytype) type {
+pub fn Parameter(comptime T: type, comptime mode: anytype) type {
     const param_types = std.ComptimeStringMap(type, .{
         .{ "any", []const T },
         .{ "scalar", T },
