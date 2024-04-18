@@ -9,6 +9,7 @@ pub const SmartIteratorMode = enum {
 
 const filter = *const fn (u8) bool;
 
+// probably need to change the name tho
 pub fn SmartIterator() type {
     return struct {
         const Self = @This();
