@@ -353,7 +353,7 @@ fn ImmutableBackend(comptime Self: type) type {
         ) reduce_type {
             
             const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
-                unary_func else chain(unary_func);
+                unary_func else chain(unary_func).call;
 
             var rdx = initial;
             for (self.items) |x| {
@@ -670,7 +670,7 @@ fn MutableBackend(comptime Self: type) type {
         pub fn map(self: Self, unary_func: anytype) Self {
 
             const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
-                unary_func else chain(unary_func);
+                unary_func else chain(unary_func).call;
 
             for (self.items) |*x| x.* = @call(.always_inline, unary_call, .{x.*});
             return self;
