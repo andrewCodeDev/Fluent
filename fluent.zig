@@ -949,8 +949,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
             for (string) |char| {
                 string_set.setValue(char, true);
             }
-            items_set.differenceWith(string_set).fillBuffer(diff_buffer);
-            return .{ .items = diff_buffer[0..] };
+            return .{ 
+                .items = items_set.differenceWith(string_set).fillBuffer(diff_buffer)
+            };
         }
 
         pub fn unionWith(self: Self, string: []const u8, union_buffer: []u8) FluentInterface(Self.DataType, false) {
@@ -964,8 +965,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
             for (string) |char| {
                 string_set.setValue(char, true);
             }
-            items_set.unionWith(string_set).fillBuffer(union_buffer);
-            return .{ .items = union_buffer[0..] };
+            return .{ 
+                .items = items_set.unionWith(string_set).fillBuffer(union_buffer)
+            };
         }
 
         pub fn intersectWith(self: Self, string: []const u8, inter_buffer: []u8) FluentInterface(Self.DataType, false) {
@@ -979,8 +981,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
             for (string) |char| {
                 string_set.setValue(char, true);
             }
-            items_set.intersectWith(string_set).fillBuffer(inter_buffer);
-            return .{ .items = inter_buffer[0..] };
+            return .{ 
+                .items = items_set.intersectWith(string_set).fillBuffer(inter_buffer)
+            };
         }
 
         ///////////////////////
@@ -1120,7 +1123,7 @@ const StringBitSet = struct {
         return self.bits[0].count() + self.bits[1].count() + self.bits[2].count() + self.bits[3].count();
     }
 
-    pub fn fillBuffer(self: *const StringBitSet, buffer: []u8) void {
+    pub fn fillBuffer(self: *const StringBitSet, buffer: []u8) []u8 {
         var val: usize = 0;
         var pos: usize = 0;
         while (val < 256) : (val += 1) {
@@ -1129,6 +1132,7 @@ const StringBitSet = struct {
                 pos += 1;
             }
         }
+        return buffer[0..pos];
     }
 };
 
