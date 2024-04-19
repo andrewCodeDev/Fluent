@@ -352,22 +352,13 @@ fn ImmutableBackend(comptime Self: type) type {
             initial: reduce_type,
         ) reduce_type {
             
-            var rdx = initial;
+            const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
+                unary_func else chain(unary_func);
 
-            switch (@typeInfo(@TypeOf(unary_func))) {
-                .Fn => {
-                    for (self.items) |x| {
-                        const y = @call(.always_inline, unary_func, .{x});
-                        rdx = @call(.always_inline, binary_func, .{ rdx, y });
-                    }
-                },
-                else => {
-                    const chained = comptime chain(unary_func);
-                    for (self.items) |x| {
-                        const y = @call(.always_inline, chained.call, .{x});
-                        rdx = @call(.always_inline, binary_func, .{ rdx, y });
-                    }
-                }
+            var rdx = initial;
+            for (self.items) |x| {
+                const y = @call(.always_inline, unary_call, .{x});
+                rdx = @call(.always_inline, binary_func, .{ rdx, y });
             }
             return rdx;
         }
