@@ -667,20 +667,12 @@ fn MutableBackend(comptime Self: type) type {
             return .{ .items = self.items[0..] };
         }
 
-        pub fn map(self: Self, unary: anytype) Self {
+        pub fn map(self: Self, unary_func: anytype) Self {
 
-            const U = @TypeOf(unary);
+            const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
+                unary_func else chain(unary_func);
 
-            switch (@typeInfo(U)) {
-                .Fn => { 
-                    for (self.items) |*x| x.* = @call(.always_inline, unary, .{x.*}); 
-                },
-                else => {
-                    const chained = comptime Fluent.chain(unary);
-                    for (self.items) |*x| x.* = @call(.always_inline, chained.call, .{x.*});
-                }
-            }
-            
+            for (self.items) |*x| x.* = @call(.always_inline, unary_call, .{x.*});
             return self;
         }
 
