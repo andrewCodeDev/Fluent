@@ -1,32 +1,34 @@
 ![fluent](https://github.com/andrewCodeDev/Fluent/assets/54549221/6064d88a-ff2a-4970-a494-a432a8e74515)
 
-A fluent-interface and iterators for chaining algorithms over slices. Fluent is dedicated to chaining operations to accomplish tasks quickly:
+A fluent-interface and iterators for chaining algorithms over slices.
 
+# Examples
+
+Copy the reverse of a list using a reverse iterator:
 ```Zig
-// copy the reverse of a list using a reverse iterator:
-
 const count = Fluent.iterator(.reverse, items_a[0..]).write(items_b[0..]);
+```
 
-// sum up the square of all elements that are even:
-
+Sum up the square of all elements that are even:
+```Zig
 const rdx = Fluent
     .iterator(.forward, items[0..])
     .filter(isEven)
     .map(square)
     .reduce(i32, Fluent.add, 0);
+```
 
-// set stride and retrieve slice windows iterative:
-
+Set stride and iteratively produce slice-windows:
+```Zig
 var itr = Fluent
     .iterator(.forward, items[0..])
     .strided(2)
 
-while (itr.window(4)) |w| {
-    // ...
-}
+while (itr.window(4)) |window| { // ...
+```
 
-// fuse multiple unary functions and filters
-
+Fuse multiple unary functions and filters:
+```Zig
 var itr = Fluent
     .iterator(.forward, items[0..])
     .map(.{
@@ -36,6 +38,8 @@ var itr = Fluent
         skipNans,
         skipInfs,
     });
+
+while (itr.next()) |value| { //...
 ```
 
 # Installation
