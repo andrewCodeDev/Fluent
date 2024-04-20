@@ -40,16 +40,20 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
         pub fn iterator(
             self: Self,
             comptime mode: IteratorMode,
-        ) IteratorInterface(DataType, mode, NoFilter{}, identity) {
+        ) BaseIterator(DataType, mode) {
             return Fluent.iterator(mode, self.items);
         }
     };
 }
 
+pub fn BaseIterator(comptime T: type, mode: IteratorMode) type {
+    return IteratorInterface(T, mode, void{}, identity);
+}
+
 pub fn iterator(
     comptime mode: IteratorMode,
     items: anytype,
-) IteratorInterface(DeepChild(@TypeOf(items)), mode, NoFilter{}, identity) {
+) BaseIterator(DeepChild(@TypeOf(items)), mode) {
     const index: usize = comptime if (mode == .forward) 0 else 1;
 
     return .{
@@ -61,10 +65,8 @@ pub fn iterator(
 
 const IteratorMode = enum { forward, reverse };
 
-// this bypass the filter and transform
-const NoFilter = struct {};
-
-pub inline fn identity(x: anytype) @TypeOf(x) {
+// bypasses filter for iterator next calls
+inline fn identity(x: anytype) @TypeOf(x) {
     return x;
 }
 
@@ -83,7 +85,7 @@ fn IteratorInterface(
         stride: usize,
 
         pub fn next(self: *Self) ?DataType {
-            if (comptime @TypeOf(filters) != NoFilter) {
+            if (comptime @TypeOf(filters) != void) {
                 // apply single filter or tuple of filters
                 switch (comptime @typeInfo(@TypeOf(filters))) {
                     .Fn => {
@@ -207,8 +209,8 @@ fn IteratorInterface(
                 return tmp.write(items);
             }
             var count: usize = 0;
-            while (self.next()) |value| : (count += 1) {
-                items[count] = value;
+            while (count < items.len) : (count += 1) {
+                items[count] = self.next() orelse return (count + 1);
             }
             return count;
         }
@@ -240,10 +242,10 @@ fn IteratorInterface(
 //////////////////////////////////////////////////////////////////////
 // chain: combine multiple unary functions into a single in-order call
 
-pub fn chain(comptime unary_tuple: anytype) type {
+pub fn chain(
+    comptime unary_tuple: anytype,
+) type {
     return struct {
-        pub const functions = unary_tuple;
-        // this doesn't get deduced in some cases - only deduced when call is used
         pub fn call(x: anytype) @TypeOf(@call(.auto, unwrap, .{ 0, unary_tuple, default(@TypeOf(x)) })) {
             return @call(.always_inline, unwrap, .{ 0, unary_tuple, x });
         }
