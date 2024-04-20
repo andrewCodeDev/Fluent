@@ -104,7 +104,6 @@ Mutable:
 copy         - copy a given slice into the acquired slice
 fill         - fills the acquired slice with a scalar value
 map          - transforms every elment in the acquired slice with a given unary function
-partition    - partiions the acquired slice based on predicate in stable or unstable manner
 replace      - replaces slice, sequence, or any at left, right, periphery or all
 reverse      - reverses the acquired slice
 rotate       - rotates the array by both negative and positive amounts
@@ -132,7 +131,7 @@ isHex          - check if string only contains hexidecimal characters
 isASCII        - check if string only contains ASCII characters
 isPrintable    - check if string only contains printable characters
 isAlnum        - check if string only contains alpha numeric characters
-unionWith      - returns set intersection between acquired slice and given slice
+unionWith      - returns set union between acquired slice and given slice
 
 Mutable:
 
@@ -143,11 +142,22 @@ title       - capitalize each sequence separated by spaces
 ```
 ### Iterator Support:
 
+Fluent iterators:
 ```
-filter      - only return elements where predicate is true
+next        - return an optional value and advance by stride
+window      - return a slice and advance by stride
+filter      - acquire a unary predicate or a tuple of unary predicates
+map         - acquire a unary transform or a tuple of unary transforms
+write       - loop and write remaining iterator values to buffer
+reduce      - accumulate the range using a binary function and initial value
+strided     - set iterator stride (default 1)
+    
+```
+Standard Iterators:
+
+```
 split       - splits a sequence on a given delimiter
 tokenize    - tokenizes a sequence on a given delimiter  
-window      - chunks a sequence in a given window size
 ```
 
 ### Simple Argument Processing example :
