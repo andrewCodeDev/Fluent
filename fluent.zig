@@ -36,6 +36,196 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
         pub usingnamespace if (DataType == u8) blk: {
             break :blk if (is_const) ImmutableStringBackend(Self) else MutableStringBackend(Self);
         } else struct {};
+
+        pub fn iterator(
+            self: Self,
+            comptime mode: IteratorMode,
+        ) IteratorInterface(DataType, mode, NoFilter{}, identity) {
+            return Fluent.iterator(mode, self.items);   
+        }
+    };
+}
+
+pub fn iterator(
+    comptime mode: IteratorMode,
+    items: anytype,
+) IteratorInterface(DeepChild(@TypeOf(items)), mode, NoFilter{}, identity) {
+
+    const index: usize = comptime if (mode == .forward) 0 else 1;
+
+    return .{
+        .items = items,
+        .index = index,
+        .stride = 1,
+    };
+}
+
+const IteratorMode = enum { forward, reverse };
+
+// this bypass the filter and transform
+const NoFilter = struct {};
+
+pub inline fn identity(x: anytype) @TypeOf(x) {
+    return x;
+}
+
+fn IteratorInterface(
+    comptime DataType: type,
+    mode: IteratorMode,
+    comptime filters: anytype, // tuple or function
+    comptime transforms: anytype, // tuple or function
+) type {
+    return struct {        
+        const Self = @This();
+        const Mode = mode;
+
+        items: []const DataType,
+        index: usize,
+        stride: usize,
+
+        pub fn next(self: *Self) ?DataType {
+
+            if (comptime @TypeOf(filters) != NoFilter) {
+                // apply single filter or tuple of filters
+                switch (comptime @typeInfo(@TypeOf(filters))) {
+                    .Fn => {
+                        if (comptime Mode == .forward) {
+                            while (self.index < self.items.len and !filters(self.items[self.index])) 
+                                self.index += self.stride;
+                        } else {
+                            while (self.index <= self.items.len and !filters(self.items[self.index])) 
+                                self.index -= self.stride;
+                        }
+                    },
+                    else => outer: { // applies inline filters 
+                        if (comptime Mode == .forward) {
+                            inner: while (self.index < self.buffer.len) : (self.index += self.stride){
+                                inline for (filters) |f| {
+                                    if (!f(self.items[self.index])) continue :inner;     
+                                } 
+                                break :outer;
+                            }
+                        } else {
+                            inner: while (self.index <= self.items.len) : (self.index += self.stride){
+                                inline for (filters) |f| {
+                                    if (!f(self.items[self.items.len - self.index])) continue :inner;     
+                                } 
+                                break :outer;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // unpack transforms into single transform call
+            const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .Fn)
+                transforms else Fluent.chain(transforms).call;
+
+            switch (comptime Mode) {
+                .forward => {
+                    if (self.index < self.items.len) {
+                        defer self.index += self.stride; 
+                        return @call(.always_inline, transform, .{ self.items[self.index] });
+                    }
+                },
+                .reverse => {
+                    if (self.index <= self.items.len) {
+                        defer self.index += self.stride;
+                        return @call(.always_inline, transform, .{ self.items[self.items.len - self.index] });
+                    }
+                }
+            }
+            return null;
+        }
+
+        pub fn strided(
+            self: Self, 
+            stride_size: usize,
+        ) Self {
+            return .{
+                .items = self.items,
+                .index = self.index,
+                .stride = stride_size,
+            };
+        }
+
+        pub fn window(
+            self: *Self, 
+            window_size: usize,
+        ) ?[]const DataType {
+            switch (comptime Mode) {
+                .forward => {
+                    if ((self.index + window_size) < self.items.len) {
+                        defer { _ = self.next(); }
+                        return self.items[self.index..][0..window_size];
+                    }
+                },
+                .reverse => {
+                    const pos = self.index - 1;
+                    if ((self.items.len - pos) >= window_size) {
+                        defer { _ = self.next(); }
+                        return self.items[(self.items.len - pos) - window_size..][0..window_size];
+                    }
+                }
+            }
+            return null;
+        }
+
+        pub fn map(
+            self: Self, 
+            comptime new_transforms: anytype,
+        ) IteratorInterface(DataType, Mode, filters, new_transforms) {
+            return .{
+                .items = self.items,
+                .index = self.index,
+                .stride = self.stride,
+            };
+        }
+
+        pub fn filter(
+            self: Self, 
+            comptime new_filters: anytype,
+        ) IteratorInterface(DataType, Mode, new_filters, transforms) {
+            return .{
+                .items = self.items,
+                .index = self.index,
+                .stride = self.stride,
+            };
+        }
+
+        pub fn write(
+            self: anytype, // for both const and non-const pointers
+            items: []DataType,
+        ) usize {
+            // enable chaining without temporaries
+            if (comptime isConst(@TypeOf(self))) {
+                var tmp = self.*;
+                return tmp.write(items);
+            }
+            var count: usize = 0;
+            while (self.next()) |value| : (count += 1) {
+                items[count] = value;
+            }
+            return count;
+        }
+
+        pub fn reduce(
+            self: anytype, // for both const and non-const pointers
+            comptime T: type,
+            comptime binary_func: anytype, // single binary function
+            initial: T,
+        ) T {
+            // enable chaining without temporaries
+            if (comptime isConst(@TypeOf(self))) {
+                var tmp = self.*;
+                return tmp.reduce(T, binary_func, initial);
+            }
+            var rdx = initial;            
+            while (self.next()) |x| {
+                rdx = @call(.always_inline, binary_func, .{ rdx, x });
+            }
+            return rdx;
+        }
     };
 }
 
@@ -368,7 +558,6 @@ fn ImmutableBackend(comptime Self: type) type {
             items: []const Self.DataType, 
             concat_buffer: []Self.DataType,
         ) FluentInterface(Self.DataType, false) {
-            // std.debug.assert(self.items.len + items.len <= concat_buffer.len);
             var concat_index: usize = self.items.len;
             @memcpy(concat_buffer[0..self.items.len], self.items);
             @memcpy(concat_buffer[concat_index..][0..items.len], items);
@@ -403,13 +592,6 @@ fn ImmutableBackend(comptime Self: type) type {
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
-        pub fn filter(
-            self: Self,
-            comptime predicate: anytype,
-        ) FilterIterator(Self.DataType, predicate) {
-            return .{ .index = 0, .buffer = self.items };
-        }
-
         pub fn split(
             self: Self,
             comptime mode: std.mem.DelimiterType,
@@ -424,13 +606,6 @@ fn ImmutableBackend(comptime Self: type) type {
             delimiter: Parameter(Self.DataType, mode),
         ) std.mem.TokenIterator(Self.DataType, mode) {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
-        }
-
-        pub fn transform(
-            self: Self,
-            comptime unary: anytype,
-        ) TransformIterator(Self.DataType, unary) {
-            return .{ .index = 0, .buffer = self.items };
         }
 
         pub fn window(
@@ -493,9 +668,6 @@ fn ImmutableBackend(comptime Self: type) type {
                 },
                 .sequence => result = std.mem.count(Self.DataType, self.items, needle),
                 .any => {
-                    // temporary doing O(N^2) before implementing something smarter
-                    std.debug.assert(self.items.len <= 1000);
-                    std.debug.assert(needle.len <= 1000);
                     for (self.items) |it| {
                         for (needle) |n| {
                             if (it == n) result += 1;
@@ -623,14 +795,6 @@ fn MutableBackend(comptime Self: type) type {
             return .{ .items = self.items[0..items.len] };
         }
 
-        pub fn partition(self: Self, comptime opt: StabilityOption, predicate: fn (Self.DataType) bool) Self {
-            switch (opt) {
-                .stable => stablePartition(Self.DataType, self, predicate),
-                .unstable => unstablePartition(Self.DataType, self, predicate),
-            }
-            return (self);
-        }
-
         pub fn rotate(self: Self, amount: anytype) Self {
             const len = self.items.len;
 
@@ -668,7 +832,6 @@ fn MutableBackend(comptime Self: type) type {
         }
 
         pub fn map(self: Self, unary_func: anytype) Self {
-
             const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
                 unary_func else chain(unary_func).call;
 
@@ -689,41 +852,6 @@ fn MutableBackend(comptime Self: type) type {
             const temp = self.items[wrapIndex(self.items.len, idx1)];
             self.items[wrapIndex(self.items.len, idx1)] = self.items[wrapIndex(self.items.len, idx2)];
             self.items[wrapIndex(self.items.len, idx2)] = temp;
-        }
-
-        fn stablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
-            if (self.items.len < 2)
-                return;
-            var i: usize = 1;
-            while (i < self.items.len) : (i += 1) {
-                var j: usize = i;
-                while (j >= 1 and !predicate(self.items[j - 1]) and predicate(self.items[j])) : (j -= 1) {
-                    self.swap(j - 1, j);
-                }
-            }
-        }
-
-        fn unstablePartition(comptime T: type, self: Self, predicate: fn (T) bool) void {
-            if (self.items.len < 2)
-                return;
-
-            var i: usize = 0;
-            var j: usize = self.items.len - 1;
-
-            while (true) : ({
-                i += 1;
-                j -= 1;
-            }) {
-                while (i < j and predicate(self.items[i]))
-                    i += 1;
-
-                while (i < j and !predicate(self.items[j]))
-                    j -= 1;
-
-                if (i >= j) return;
-
-                std.mem.swap(T, &self.items[i], &self.items[j]);
-            }
         }
 
         fn replaceRange(self: Self, start: usize, end: usize, comptime mode: FluentMode, with: Parameter(Self.DataType, mode)) Self {
@@ -1333,70 +1461,6 @@ pub inline fn mul(x: anytype, y: anytype) @TypeOf(x, y) {
 }
 pub inline fn negate(x: anytype) @TypeOf(x) {
     return -x;
-}
-
-fn FilterIterator(comptime T: type, comptime predicate: anytype) type {
-    return struct {        
-        buffer: []const T,
-        index: usize,
-
-        pub fn next(self: *@This()) ?T {
-
-            switch (@typeInfo(@TypeOf(predicate))) {
-                .Fn => {
-                    while (self.index < self.buffer.len and !predicate(self.buffer[self.index])) {
-                        self.index += 1;
-                    }
-                },
-                else => outer: {
-                    inner: while (self.index < self.buffer.len) : (self.index += 1){
-                        inline for (predicate) |p| {
-                            if (!p(self.buffer[self.index])) continue :inner;     
-                        }
-                        break :outer;
-                    }
-                }
-            }
-            
-            // return qualifying element if in range
-            if (self.index < self.buffer.len) {
-                defer self.index += 1;
-                return self.buffer[self.index];
-            }
-            return null;
-        }
-    };
-}
-
-fn TransformIterator(comptime T: type, comptime unary: anytype) type {
-    return struct {        
-        buffer: []const T,
-        index: usize,
-        
-        pub fn next(self: *@This()) ?T {
-            const U = @TypeOf(unary);
-
-            return switch (@typeInfo(U)) {
-                .Fn => { 
-                    // return qualifying element if in range
-                    if (self.index < self.buffer.len) {
-                        defer self.index += 1;
-                        return unary(self.buffer[self.index]);
-                    }
-                    return null;
-
-                },
-                else => {
-                    const chained = comptime Fluent.chain(unary);
-                    if (self.index < self.buffer.len) {
-                        defer self.index += 1;
-                        return chained.call(self.buffer[self.index]);
-                    }
-                    return null;
-                }
-            };
-        }
-    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
