@@ -34,7 +34,10 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
             MutableBackend(Self);
 
         pub usingnamespace if (DataType == u8) blk: {
-            break :blk if (is_const) ImmutableStringBackend(Self) else MutableStringBackend(Self);
+            break :blk if (is_const) 
+                ImmutableStringBackend(Self) 
+            else
+                MutableStringBackend(Self);
         } else struct {};
 
         pub fn iterator(
@@ -213,9 +216,7 @@ fn IteratorInterface(
 
             // unpack transforms into single transform call
             const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .Fn)
-                transforms
-            else
-                Fluent.chain(transforms).call;
+                transforms else Fluent.chain(transforms).call;
 
             switch (comptime Mode) {
                 .forward => {
@@ -251,7 +252,7 @@ fn IteratorInterface(
         ) ?[]const DataType {
             switch (comptime Mode) {
                 .forward => {
-                    if ((self.index + window_size) < self.items.len) {
+                    if ((self.index + window_size) <= self.items.len) {
                         defer {
                             _ = self.next();
                         }
@@ -468,7 +469,7 @@ fn ImmutableBackend(comptime Self: type) type {
                 const b: usize = @max(a, @min(j, self.items.len));
                 return .{ .items = if (a < b) self.items[a..b] else self.items[0..0] };
             } else if (comptime I != J) { // default to isize version
-                @call(.always_inline, slice, .{ self, @as(isize, @intCast(i)), @as(isize, @intCast(j)) });
+                    self.slice(@as(isize, @intCast(i)), @as(isize, @intCast(j)));
             } else {
                 const l: isize = @intCast(self.items.len);
                 const a: usize = wrapIndex(self.items.len, @min(@max(-l, i), l));
@@ -618,14 +619,6 @@ fn ImmutableBackend(comptime Self: type) type {
             delimiter: Parameter(Self.DataType, mode),
         ) std.mem.TokenIterator(Self.DataType, mode) {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
-        }
-
-        pub fn window(
-            self: Self,
-            size: usize,
-            advance: usize,
-        ) std.mem.WindowIterator(Self.DataType) {
-            return std.mem.window(Self.DataType, self.items, size, advance);
         }
 
         ///////////////////////
@@ -833,13 +826,23 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
-        pub fn replace(self: Self, opt: ReplaceOption, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
+        pub fn replace(
+            self: Self,
+            opt: ReplaceOption,
+            comptime mode: FluentMode,
+            this: Parameter(Self.DataType, mode),
+            with: Parameter(Self.DataType, mode),
+        ) Self {
             if (self.items.len == 0) return self;
+
             if (opt == .all) return replaceAll(self, mode, this, with);
+
             if (opt == .first or opt == .periphery)
                 _ = replaceFirst(self, mode, this, with);
+
             if (opt == .last or opt == .periphery)
                 _ = replaceLast(self, mode, this, with);
+
             return .{ .items = self.items[0..] };
         }
 
@@ -862,13 +865,13 @@ fn MutableBackend(comptime Self: type) type {
         //  PRIVATE SECTION  //
         ///////////////////////
 
-        fn swap(self: Self, idx1: usize, idx2: usize) void {
-            const temp = self.items[wrapIndex(self.items.len, idx1)];
-            self.items[wrapIndex(self.items.len, idx1)] = self.items[wrapIndex(self.items.len, idx2)];
-            self.items[wrapIndex(self.items.len, idx2)] = temp;
-        }
-
-        fn replaceRange(self: Self, start: usize, end: usize, comptime mode: FluentMode, with: Parameter(Self.DataType, mode)) Self {
+        fn replaceRange(
+            self: Self,
+            start: usize,
+            end: usize,
+            comptime mode: FluentMode,
+            with: Parameter(Self.DataType, mode),
+        ) Self {
             return switch (mode) {
                 .scalar => self.setAt(start, with),
                 .sequence, .any => blk: {
@@ -878,7 +881,12 @@ fn MutableBackend(comptime Self: type) type {
             };
         }
 
-        fn replaceFirst(self: Self, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
+        fn replaceFirst(
+            self: Self,
+            comptime mode: FluentMode,
+            this: Parameter(Self.DataType, mode),
+            with: Parameter(Self.DataType, mode)
+        ) Self {
             switch (mode) {
                 .scalar => for (self.items) |*item| {
                     if (item.* != this) continue;
@@ -887,10 +895,10 @@ fn MutableBackend(comptime Self: type) type {
                 },
                 .sequence => {
                     std.debug.assert(this.len == with.len);
-                    var win_iter = self.window(this.len, 1);
+                    var win_iter = self.iterator(.forward);
                     var offset: usize = 0;
-                    while (win_iter.next()) |win| : (offset += 1) {
-                        if (std.mem.eql(Self.DataType, win, this) == false)
+                    while (win_iter.window(this.len)) |win| : (offset += 1) {
+                        if (!std.mem.eql(Self.DataType, win, this))
                             continue;
                         return replaceRange(self, offset, offset + with.len, mode, with);
                     }
@@ -911,7 +919,12 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
-        fn replaceLast(self: Self, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
+        fn replaceLast(
+            self: Self,
+            comptime mode: FluentMode,
+            this: Parameter(Self.DataType, mode),
+            with: Parameter(Self.DataType, mode),
+        ) Self {
             switch (mode) {
                 .scalar => {
                     var rev_iter = std.mem.reverseIterator(self.items);
@@ -948,14 +961,19 @@ fn MutableBackend(comptime Self: type) type {
             return self;
         }
 
-        fn replaceAll(self: Self, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
+        fn replaceAll(
+            self: Self,
+            comptime mode: FluentMode,
+            this: Parameter(Self.DataType, mode),
+            with: Parameter(Self.DataType, mode),
+        ) Self {
             switch (mode) {
                 .scalar => std.mem.replaceScalar(Self.DataType, self.items, this, with),
                 .sequence => {
                     std.debug.assert(this.len == with.len);
-                    var win_iter = self.window(this.len, 1);
+                    var win_iter = self.iterator(.forward);
                     var offset: usize = 0;
-                    while (win_iter.next()) |win| : (offset += 1) {
+                    while (win_iter.window(this.len)) |win| : (offset += 1) {                        
                         if (std.mem.eql(Self.DataType, win, this))
                             _ = replaceRange(self, offset, offset + with.len, mode, with);
                     }
@@ -1288,11 +1306,6 @@ const TrimOptions = enum {
     any,
 };
 
-const StabilityOption = enum {
-    stable,
-    unstable,
-};
-
 const SortDirection = enum {
     ascending,
     descending,
@@ -1379,15 +1392,6 @@ fn DeepChild(comptime T: type) type {
         .Array => |a| a.child,
         else => @compileError("Unsupported Type"),
     };
-}
-
-inline fn wrapRange(len: usize, start: usize, end: usize) struct { start: usize, end: usize } {
-    if (len == 0) return .{ .start = 0, .end = 0 };
-    const wraped_start: usize = if (start > len) 0 else start;
-    const wraped_end: usize = if (end > len) len - 1 else end;
-    if (wraped_start == wraped_end) return .{ .start = 0, .end = len };
-    if (wraped_start > wraped_end) return .{ .start = wraped_end, .end = wraped_start };
-    return .{ .start = wraped_start, .end = wraped_end };
 }
 
 inline fn wrapIndex(len: usize, idx: anytype) usize {
