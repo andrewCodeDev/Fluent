@@ -4,6 +4,26 @@ A fluent-interface and iterators for chaining algorithms over slices.
 
 # Examples
 
+Concatenate, trim, and title string:
+```Zig
+const result = Fluent.init(str_a)       // initialize our interface on str_a
+        .concat(str_b, buf[0..])        // concatenate str_b into buffer
+        .trim(.periphery, .scalar, ' ') // trim spaces on both sides
+        .title();                       // python title function
+```
+
+Fuse map-functions to calculate sigmoid to buffer:
+```
+const x = Fluent.init(buf[0..])
+    .copy(&[_]f32{ -2, -1, 0, 1, 2 })
+    .map(.{
+        Fluent.negate,
+        std.math.exp,
+        Fluent.bind(.{ 1.0 }, Fluent.add),
+        Fluent.bind(.{ 1.0 }, Fluent.div),
+    });
+```
+
 Copy the reverse of a list using a reverse iterator:
 ```Zig
 const count = Fluent.iterator(.reverse, items_a[0..]).write(items_b[0..]);
