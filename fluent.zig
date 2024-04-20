@@ -7,7 +7,7 @@ const math = std.math;
 const Fluent = @This();
 
 ////////////////////////////////////////////////////////////////////////////////
-// Public Access Point                                                       ///
+// Public Fluent Interface Access Point                                      ///
 ////////////////////////////////////////////////////////////////////////////////
 
 pub fn init(slice: anytype) FluentInterface(DeepChild(@TypeOf(slice)), isConst(@TypeOf(slice))) {
@@ -46,6 +46,12 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
     };
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Public Fluent Iterator Access Point                                      ////
+////////////////////////////////////////////////////////////////////////////////
+
+pub const IteratorMode = enum { forward, reverse };
+
 pub fn BaseIterator(comptime T: type, mode: IteratorMode) type {
     return IteratorInterface(T, mode, void{}, identity);
 }
@@ -63,12 +69,100 @@ pub fn iterator(
     };
 }
 
-const IteratorMode = enum { forward, reverse };
 
-// bypasses filter for iterator next calls
-inline fn identity(x: anytype) @TypeOf(x) {
-    return x;
+////////////////////////////////////////////////////////////////////////////////
+// UNARY FUNCTION ADAPTER :                                                   //
+////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////
+// chain: combine multiple unary functions into a single in-order call
+
+pub fn chain(
+    comptime unary_tuple: anytype,
+) type {
+    return struct {
+        pub fn call(x: anytype) @TypeOf(@call(.auto, unwrap, .{ 0, unary_tuple, default(@TypeOf(x)) })) {
+            return @call(.always_inline, unwrap, .{ 0, unary_tuple, x });
+        }
+    };
 }
+
+fn unwrap(
+    comptime pos: usize,
+    comptime unary_tuple: anytype,
+    arg: anytype,
+) if (pos < tupleSize(unary_tuple))
+    @TypeOf(unary_tuple[pos](default(@TypeOf(arg))))
+else
+    @TypeOf(arg) {
+    // this is a forward-unwrap that passes
+    // outcomes of one function to the next
+    if (comptime pos == tupleSize(unary_tuple)) {
+        return arg;
+    }
+    return @call(.always_inline, unwrap, .{ (pos + 1), unary_tuple, @call(.always_inline, unary_tuple[pos], .{arg}) });
+}
+
+//////////////////////////////////////////////////////////////////////
+// bind: affix comptime arguments to the front of a function
+
+pub fn bind(
+    comptime bind_tuple: anytype,
+    comptime function: anytype,
+) bindReturn(bind_tuple, function) {
+    const bind_count = comptime tupleSize(bind_tuple);
+    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
+
+    if (comptime total_count - bind_count == 1) {
+        return struct {
+            pub fn call(x: anytype) @TypeOf(x) {
+                return @call(.always_inline, function, bind_tuple ++ .{x});
+            }
+        }.call;
+    } else {
+        return struct {
+            pub fn call(x: anytype, y: anytype) @TypeOf(x) {
+                return @call(.always_inline, function, bind_tuple ++ .{ x, y });
+            }
+        }.call;
+    }
+}
+
+fn bindReturn(
+    comptime bind_tuple: anytype,
+    comptime function: anytype,
+) type {
+    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
+    const bind_count = comptime tupleSize(bind_tuple);
+
+    if (comptime total_count < bind_count)
+        @compileError("too many arguments to bind");
+
+    if (comptime total_count - bind_count > 2)
+        @compileError("fluent bind must result in unary or binary function");
+
+    const choices = struct {
+        pub fn unary(x: anytype) @TypeOf(x) {
+            return x;
+        }
+        pub fn binary(x: anytype, y: anytype) @TypeOf(x) {
+            _ = &y;
+            return x;
+        }
+    };
+    return if (comptime (total_count - bind_count) == 1)
+        @TypeOf(choices.unary)
+    else
+        @TypeOf(choices.binary);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//                        Backends and Implementation                         //
+////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+// Iterator Interface Implementation:                                         //
+////////////////////////////////////////////////////////////////////////////////
 
 fn IteratorInterface(
     comptime DataType: type,
@@ -234,96 +328,6 @@ fn IteratorInterface(
         }
     };
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// UNARY FUNCTION ADAPTER :                                                   //
-////////////////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////
-// chain: combine multiple unary functions into a single in-order call
-
-pub fn chain(
-    comptime unary_tuple: anytype,
-) type {
-    return struct {
-        pub fn call(x: anytype) @TypeOf(@call(.auto, unwrap, .{ 0, unary_tuple, default(@TypeOf(x)) })) {
-            return @call(.always_inline, unwrap, .{ 0, unary_tuple, x });
-        }
-    };
-}
-
-fn unwrap(
-    comptime pos: usize,
-    comptime unary_tuple: anytype,
-    arg: anytype,
-) if (pos < tupleSize(unary_tuple))
-    @TypeOf(unary_tuple[pos](default(@TypeOf(arg))))
-else
-    @TypeOf(arg) {
-    // this is a forward-unwrap that passes
-    // outcomes of one function to the next
-    if (comptime pos == tupleSize(unary_tuple)) {
-        return arg;
-    }
-    return @call(.always_inline, unwrap, .{ (pos + 1), unary_tuple, @call(.always_inline, unary_tuple[pos], .{arg}) });
-}
-
-//////////////////////////////////////////////////////////////////////
-// bind: affix comptime arguments to the front of a function
-
-pub fn bind(
-    comptime bind_tuple: anytype,
-    comptime function: anytype,
-) bindReturn(bind_tuple, function) {
-    const bind_count = comptime tupleSize(bind_tuple);
-    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
-
-    if (comptime total_count - bind_count == 1) {
-        return struct {
-            pub fn call(x: anytype) @TypeOf(x) {
-                return @call(.always_inline, function, bind_tuple ++ .{x});
-            }
-        }.call;
-    } else {
-        return struct {
-            pub fn call(x: anytype, y: anytype) @TypeOf(x) {
-                return @call(.always_inline, function, bind_tuple ++ .{ x, y });
-            }
-        }.call;
-    }
-}
-
-fn bindReturn(
-    comptime bind_tuple: anytype,
-    comptime function: anytype,
-) type {
-    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
-    const bind_count = comptime tupleSize(bind_tuple);
-
-    if (comptime total_count < bind_count)
-        @compileError("too many arguments to bind");
-
-    if (comptime total_count - bind_count > 2)
-        @compileError("fluent bind must result in unary or binary function");
-
-    const choices = struct {
-        pub fn unary(x: anytype) @TypeOf(x) {
-            return x;
-        }
-        pub fn binary(x: anytype, y: anytype) @TypeOf(x) {
-            _ = &y;
-            return x;
-        }
-    };
-    return if (comptime (total_count - bind_count) == 1)
-        @TypeOf(choices.unary)
-    else
-        @TypeOf(choices.binary);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//                        Backends and Implementation                         //
-////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 // IMMUTABLE BACKEND :                                                        //
@@ -1339,6 +1343,11 @@ fn default(comptime T: type) T {
         return true;
     }
     return 0;
+}
+
+// bypasses iterator transform
+inline fn identity(x: anytype) @TypeOf(x) {
+    return x;
 }
 
 fn isFloat(comptime T: type) bool {
