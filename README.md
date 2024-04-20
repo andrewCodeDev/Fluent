@@ -13,7 +13,7 @@ const result = Fluent.init(str_a)       // initialize our interface on str_a
 ```
 
 Fuse map-functions to calculate sigmoid to buffer:
-```
+```Zig
 const x = Fluent.init(buf[0..])
     .copy(&[_]f32{ -2, -1, 0, 1, 2 })
     .map(.{
