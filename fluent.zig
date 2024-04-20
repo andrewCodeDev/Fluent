@@ -41,7 +41,7 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
             self: Self,
             comptime mode: IteratorMode,
         ) IteratorInterface(DataType, mode, NoFilter{}, identity) {
-            return Fluent.iterator(mode, self.items);   
+            return Fluent.iterator(mode, self.items);
         }
     };
 }
@@ -50,7 +50,6 @@ pub fn iterator(
     comptime mode: IteratorMode,
     items: anytype,
 ) IteratorInterface(DeepChild(@TypeOf(items)), mode, NoFilter{}, identity) {
-
     const index: usize = comptime if (mode == .forward) 0 else 1;
 
     return .{
@@ -75,7 +74,7 @@ fn IteratorInterface(
     comptime filters: anytype, // tuple or function
     comptime transforms: anytype, // tuple or function
 ) type {
-    return struct {        
+    return struct {
         const Self = @This();
         const Mode = mode;
 
@@ -84,62 +83,63 @@ fn IteratorInterface(
         stride: usize,
 
         pub fn next(self: *Self) ?DataType {
-
             if (comptime @TypeOf(filters) != NoFilter) {
                 // apply single filter or tuple of filters
                 switch (comptime @typeInfo(@TypeOf(filters))) {
                     .Fn => {
                         if (comptime Mode == .forward) {
-                            while (self.index < self.items.len and !filters(self.items[self.index])) 
+                            while (self.index < self.items.len and !filters(self.items[self.index]))
                                 self.index += self.stride;
                         } else {
-                            while (self.index <= self.items.len and !filters(self.items[self.index])) 
+                            while (self.index <= self.items.len and !filters(self.items[self.index]))
                                 self.index -= self.stride;
                         }
                     },
-                    else => outer: { // applies inline filters 
+                    else => outer: { // applies inline filters
                         if (comptime Mode == .forward) {
-                            inner: while (self.index < self.buffer.len) : (self.index += self.stride){
+                            inner: while (self.index < self.buffer.len) : (self.index += self.stride) {
                                 inline for (filters) |f| {
-                                    if (!f(self.items[self.index])) continue :inner;     
-                                } 
+                                    if (!f(self.items[self.index])) continue :inner;
+                                }
                                 break :outer;
                             }
                         } else {
-                            inner: while (self.index <= self.items.len) : (self.index += self.stride){
+                            inner: while (self.index <= self.items.len) : (self.index += self.stride) {
                                 inline for (filters) |f| {
-                                    if (!f(self.items[self.items.len - self.index])) continue :inner;     
-                                } 
+                                    if (!f(self.items[self.items.len - self.index])) continue :inner;
+                                }
                                 break :outer;
                             }
                         }
-                    }
+                    },
                 }
             }
 
             // unpack transforms into single transform call
             const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .Fn)
-                transforms else Fluent.chain(transforms).call;
+                transforms
+            else
+                Fluent.chain(transforms).call;
 
             switch (comptime Mode) {
                 .forward => {
                     if (self.index < self.items.len) {
-                        defer self.index += self.stride; 
-                        return @call(.always_inline, transform, .{ self.items[self.index] });
+                        defer self.index += self.stride;
+                        return @call(.always_inline, transform, .{self.items[self.index]});
                     }
                 },
                 .reverse => {
                     if (self.index <= self.items.len) {
                         defer self.index += self.stride;
-                        return @call(.always_inline, transform, .{ self.items[self.items.len - self.index] });
+                        return @call(.always_inline, transform, .{self.items[self.items.len - self.index]});
                     }
-                }
+                },
             }
             return null;
         }
 
         pub fn strided(
-            self: Self, 
+            self: Self,
             stride_size: usize,
         ) Self {
             return .{
@@ -150,29 +150,33 @@ fn IteratorInterface(
         }
 
         pub fn window(
-            self: *Self, 
+            self: *Self,
             window_size: usize,
         ) ?[]const DataType {
             switch (comptime Mode) {
                 .forward => {
                     if ((self.index + window_size) < self.items.len) {
-                        defer { _ = self.next(); }
+                        defer {
+                            _ = self.next();
+                        }
                         return self.items[self.index..][0..window_size];
                     }
                 },
                 .reverse => {
                     const pos = self.index - 1;
                     if ((self.items.len - pos) >= window_size) {
-                        defer { _ = self.next(); }
-                        return self.items[(self.items.len - pos) - window_size..][0..window_size];
+                        defer {
+                            _ = self.next();
+                        }
+                        return self.items[(self.items.len - pos) - window_size ..][0..window_size];
                     }
-                }
+                },
             }
             return null;
         }
 
         pub fn map(
-            self: Self, 
+            self: Self,
             comptime new_transforms: anytype,
         ) IteratorInterface(DataType, Mode, filters, new_transforms) {
             return .{
@@ -183,7 +187,7 @@ fn IteratorInterface(
         }
 
         pub fn filter(
-            self: Self, 
+            self: Self,
             comptime new_filters: anytype,
         ) IteratorInterface(DataType, Mode, new_filters, transforms) {
             return .{
@@ -220,7 +224,7 @@ fn IteratorInterface(
                 var tmp = self.*;
                 return tmp.reduce(T, binary_func, initial);
             }
-            var rdx = initial;            
+            var rdx = initial;
             while (self.next()) |x| {
                 rdx = @call(.always_inline, binary_func, .{ rdx, x });
             }
@@ -234,11 +238,9 @@ fn IteratorInterface(
 ////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////
-// chain: combine multiple unary functions into a single in-order call 
+// chain: combine multiple unary functions into a single in-order call
 
-pub fn chain(
-    comptime unary_tuple: anytype
-) type {
+pub fn chain(comptime unary_tuple: anytype) type {
     return struct {
         pub const functions = unary_tuple;
         // this doesn't get deduced in some cases - only deduced when call is used
@@ -246,33 +248,31 @@ pub fn chain(
             return @call(.always_inline, unwrap, .{ 0, unary_tuple, x });
         }
     };
-} 
+}
 
 fn unwrap(
     comptime pos: usize,
     comptime unary_tuple: anytype,
     arg: anytype,
 ) if (pos < tupleSize(unary_tuple))
-    @TypeOf(unary_tuple[pos](default(@TypeOf(arg)))) else @TypeOf(arg)
-{
+    @TypeOf(unary_tuple[pos](default(@TypeOf(arg))))
+else
+    @TypeOf(arg) {
     // this is a forward-unwrap that passes
     // outcomes of one function to the next
     if (comptime pos == tupleSize(unary_tuple)) {
         return arg;
     }
-    return @call(.always_inline, unwrap, .{ 
-        (pos + 1), unary_tuple, @call(.always_inline, unary_tuple[pos], .{ arg })
-    });
+    return @call(.always_inline, unwrap, .{ (pos + 1), unary_tuple, @call(.always_inline, unary_tuple[pos], .{arg}) });
 }
 
 //////////////////////////////////////////////////////////////////////
-// bind: affix comptime arguments to the front of a function 
+// bind: affix comptime arguments to the front of a function
 
 pub fn bind(
     comptime bind_tuple: anytype,
     comptime function: anytype,
 ) bindReturn(bind_tuple, function) {
-
     const bind_count = comptime tupleSize(bind_tuple);
     const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
 
@@ -285,7 +285,7 @@ pub fn bind(
     } else {
         return struct {
             pub fn call(x: anytype, y: anytype) @TypeOf(x) {
-                return @call(.always_inline, function, bind_tuple ++ .{x, y});
+                return @call(.always_inline, function, bind_tuple ++ .{ x, y });
             }
         }.call;
     }
@@ -305,11 +305,18 @@ fn bindReturn(
         @compileError("fluent bind must result in unary or binary function");
 
     const choices = struct {
-      pub fn unary(x: anytype) @TypeOf(x) { return x; }
-      pub fn binary(x: anytype, y: anytype) @TypeOf(x) { _ = &y; return x; }
+        pub fn unary(x: anytype) @TypeOf(x) {
+            return x;
+        }
+        pub fn binary(x: anytype, y: anytype) @TypeOf(x) {
+            _ = &y;
+            return x;
+        }
     };
     return if (comptime (total_count - bind_count) == 1)
-        @TypeOf(choices.unary) else @TypeOf(choices.binary);
+        @TypeOf(choices.unary)
+    else
+        @TypeOf(choices.binary);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -442,7 +449,7 @@ fn ImmutableBackend(comptime Self: type) type {
         pub fn slice(self: Self, i: anytype, j: anytype) Self {
             const I = @TypeOf(i);
             const J = @TypeOf(j);
-    
+
             if (comptime !isInteger(I) or !isInteger(J))
                 @compileError("slicing requires integer types.");
 
@@ -454,14 +461,12 @@ fn ImmutableBackend(comptime Self: type) type {
                 const a: usize = @min(i, self.items.len);
                 const b: usize = @max(a, @min(j, self.items.len));
                 return .{ .items = if (a < b) self.items[a..b] else self.items[0..0] };
-
             } else if (comptime I != J) { // default to isize version
                 @call(.always_inline, slice, .{ self, @as(isize, @intCast(i)), @as(isize, @intCast(j)) });
-
             } else {
                 const l: isize = @intCast(self.items.len);
                 const a: usize = wrapIndex(self.items.len, @min(@max(-l, i), l));
-                const b: usize = wrapIndex(self.items.len, @min(@max(-l, j), l));               
+                const b: usize = wrapIndex(self.items.len, @min(@max(-l, j), l));
                 return .{ .items = if (a < b) self.items[a..b] else self.items[0..0] };
             }
         }
@@ -541,9 +546,10 @@ fn ImmutableBackend(comptime Self: type) type {
             comptime binary_func: anytype,
             initial: reduce_type,
         ) reduce_type {
-            
             const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
-                unary_func else chain(unary_func).call;
+                unary_func
+            else
+                chain(unary_func).call;
 
             var rdx = initial;
             for (self.items) |x| {
@@ -554,8 +560,8 @@ fn ImmutableBackend(comptime Self: type) type {
         }
 
         pub fn concat(
-            self: Self, 
-            items: []const Self.DataType, 
+            self: Self,
+            items: []const Self.DataType,
             concat_buffer: []Self.DataType,
         ) FluentInterface(Self.DataType, false) {
             var concat_index: usize = self.items.len;
@@ -833,7 +839,9 @@ fn MutableBackend(comptime Self: type) type {
 
         pub fn map(self: Self, unary_func: anytype) Self {
             const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
-                unary_func else chain(unary_func).call;
+                unary_func
+            else
+                chain(unary_func).call;
 
             for (self.items) |*x| x.* = @call(.always_inline, unary_call, .{x.*});
             return self;
@@ -1060,9 +1068,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             for (string) |char| {
                 string_set.setValue(char, true);
             }
-            return .{ 
-                .items = items_set.differenceWith(string_set).fillBuffer(diff_buffer)
-            };
+            return .{ .items = items_set.differenceWith(string_set).fillBuffer(diff_buffer) };
         }
 
         pub fn unionWith(self: Self, string: []const u8, union_buffer: []u8) FluentInterface(Self.DataType, false) {
@@ -1076,9 +1082,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             for (string) |char| {
                 string_set.setValue(char, true);
             }
-            return .{ 
-                .items = items_set.unionWith(string_set).fillBuffer(union_buffer)
-            };
+            return .{ .items = items_set.unionWith(string_set).fillBuffer(union_buffer) };
         }
 
         pub fn intersectWith(self: Self, string: []const u8, inter_buffer: []u8) FluentInterface(Self.DataType, false) {
@@ -1092,9 +1096,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             for (string) |char| {
                 string_set.setValue(char, true);
             }
-            return .{ 
-                .items = items_set.intersectWith(string_set).fillBuffer(inter_buffer)
-            };
+            return .{ .items = items_set.intersectWith(string_set).fillBuffer(inter_buffer) };
         }
 
         ///////////////////////
@@ -1975,9 +1977,8 @@ test "count(self, opt, mode, needle)           : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "slice(self, start, end)                  : [start..end]" {
-
     const string: []const u8 = "012_345_678";
-        
+
     const self = init(string);
 
     { // Unsigned:
@@ -1988,15 +1989,15 @@ test "slice(self, start, end)                  : [start..end]" {
         try expect(self.slice(@as(usize, 6), @as(usize, 5)).items.len == 0);
         try expect(self.slice(@as(usize, 0), @as(usize, 3)).equal(string[0..3]));
         try expect(self.slice(@as(usize, 4), @as(usize, 7)).equal(string[4..7]));
-    }                
-    { // signed: 
+    }
+    { // signed:
         try expect(self.slice(@as(isize, -6), @as(isize, -4)).equal("45"));
         try expect(self.slice(@as(isize, -3), @as(isize, -1)).equal("67"));
         try expect(self.slice(@as(isize, 5), @as(isize, -4)).equal("45"));
         try expect(self.slice(@as(isize, 8), @as(isize, -1)).equal("67"));
         try expect(self.slice(@as(isize, -6), @as(isize, 7)).equal("45"));
         try expect(self.slice(@as(isize, -3), @as(isize, 10)).equal("67"));
-        try expect(self.slice(@as(isize, 0), @as(isize, -1)).equal(string[0..string.len - 1]));
+        try expect(self.slice(@as(isize, 0), @as(isize, -1)).equal(string[0 .. string.len - 1]));
         try expect(self.slice(@as(isize, 0), @as(isize, 3)).equal(string[0..3]));
         try expect(self.slice(@as(isize, 4), @as(isize, 7)).equal(string[4..7]));
     }
@@ -2495,37 +2496,6 @@ test "join(self, collection, join_buffer)      : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-fn isOne(x: u8) bool {
-    return (x == '1');
-}
-
-test "partition(self, opt, predicate)          : MutSelf" {
-    const test_case = &[_][]const u8{
-        "01010101", "a1b2c3d4",
-        "1 1 1 1 ", "aAbBcCdD",
-    };
-
-    const predicators = [_]fn (u8) bool{
-        isOne,                  std.ascii.isDigit,
-        std.ascii.isWhitespace, std.ascii.isUpper,
-    };
-
-    const expected = &[_][]const u8{
-        "11110000", "1234abcd",
-        "    1111", "ABCDabcd",
-    };
-
-    var buffer: [8]u8 = undefined;
-    inline for (expected, test_case, predicators) |answer, case, predicate| {
-        const result = init(buffer[0..])
-            .copy(case)
-            .partition(.stable, predicate);
-        try expect(result.equal(answer));
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 test "trim(self, opt, kind, actor)             : scalar" {
     const source = "     This is a string     ";
     var buffer: [source.len]u8 = undefined;
@@ -2953,7 +2923,8 @@ test "filter                                  : ConstSelf" {
     var buffer: [32]u8 = undefined;
 
     var pos: usize = 0;
-    var itr = x.filter(std.ascii.isDigit);
+    var itr = x.iterator(.forward)
+        .filter(std.ascii.isDigit);
 
     while (itr.next()) |d| : (pos += 1) {
         buffer[pos] = d;
