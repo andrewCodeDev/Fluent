@@ -190,8 +190,8 @@ fn IteratorInterface(
                             while (self.index < self.items.len and !filters(self.items[self.index]))
                                 self.index += self.stride;
                         } else {
-                            while (self.index <= self.items.len and !filters(self.items[self.index]))
-                                self.index -= self.stride;
+                            while (self.index <= self.items.len and !filters(self.items[self.items.len - self.index]))
+                                self.index += self.stride;
                         }
                     },
                     else => outer: { // applies inline filters
