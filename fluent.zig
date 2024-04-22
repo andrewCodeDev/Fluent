@@ -10,17 +10,17 @@ const Fluent = @This();
 // Public Fluent Interface Access Point                                      ///
 ////////////////////////////////////////////////////////////////////////////////
 
-pub fn init(slice: anytype) FluentInterface(DeepChild(@TypeOf(slice)), isConst(@TypeOf(slice))) {
+pub fn init(slice: anytype) FluentInterface(@TypeOf(slice)) {
     return .{ .items = slice };
 }
 
-fn FluentInterface(comptime T: type, comptime is_const: bool) type {
+fn FluentInterface(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        pub const DataType = T;
+        pub const DataType = DeepChild(T);
 
-        pub const SliceType = if (is_const) []const T else []T;
+        pub const SliceType = if (isConst(T)) []const DataType else []DataType;
 
         items: SliceType,
 
@@ -28,13 +28,13 @@ fn FluentInterface(comptime T: type, comptime is_const: bool) type {
         // and dispatch to different versions of this thing
         // depending on the circumstance.
 
-        pub usingnamespace if (is_const)
+        pub usingnamespace if (isConst(T))
             ImmutableBackend(Self)
         else
             MutableBackend(Self);
 
         pub usingnamespace if (DataType == u8) blk: {
-            break :blk if (is_const) 
+            break :blk if (isConst(T)) 
                 ImmutableStringBackend(Self) 
             else
                 MutableStringBackend(Self);
@@ -570,7 +570,7 @@ fn ImmutableBackend(comptime Self: type) type {
             self: Self,
             items: []const Self.DataType,
             concat_buffer: []Self.DataType,
-        ) FluentInterface(Self.DataType, false) {
+        ) FluentInterface([]Self.DataType) {
             var concat_index: usize = self.items.len;
             @memcpy(concat_buffer[0..self.items.len], self.items);
             @memcpy(concat_buffer[concat_index..][0..items.len], items);
@@ -582,7 +582,7 @@ fn ImmutableBackend(comptime Self: type) type {
             self: Self,
             collection: []const []const Self.DataType,
             join_buffer: []Self.DataType,
-        ) FluentInterface(Self.DataType, false) {
+        ) FluentInterface([]Self.DataType) {
             std.debug.assert(self.items.len < join_buffer.len);
             var curr_idx: usize = self.items.len;
 
@@ -1081,7 +1081,11 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return .{ .items = self.items[start..end] };
         }
 
-        pub fn differenceWith(self: Self, string: []const u8, diff_buffer: []u8) FluentInterface(Self.DataType, false) {
+        pub fn differenceWith(
+            self: Self,
+            string: []const u8,
+            diff_buffer: []u8,
+        ) FluentInterface([]Self.DataType) {
             var items_set = StringBitSet.init();
             var string_set = StringBitSet.init();
 
@@ -1095,7 +1099,11 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return .{ .items = items_set.differenceWith(string_set).fillBuffer(diff_buffer) };
         }
 
-        pub fn unionWith(self: Self, string: []const u8, union_buffer: []u8) FluentInterface(Self.DataType, false) {
+        pub fn unionWith(
+            self: Self,
+            string: []const u8,
+            union_buffer: []u8,
+        ) FluentInterface([]Self.DataType) {
             var items_set = StringBitSet.init();
             var string_set = StringBitSet.init();
 
@@ -1109,7 +1117,11 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return .{ .items = items_set.unionWith(string_set).fillBuffer(union_buffer) };
         }
 
-        pub fn intersectWith(self: Self, string: []const u8, inter_buffer: []u8) FluentInterface(Self.DataType, false) {
+        pub fn intersectWith(
+            self: Self,
+            string: []const u8,
+            inter_buffer: []u8,
+        ) FluentInterface([]Self.DataType) {
             var items_set = StringBitSet.init();
             var string_set = StringBitSet.init();
 
