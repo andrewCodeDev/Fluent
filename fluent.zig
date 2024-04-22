@@ -1449,23 +1449,36 @@ fn simdReduce(
     items: []const T,
     initial: T,
 ) T {
-    // TODO: Check generated assembly on <= loop code gen.
+    // Special thanks to the user "nyc" over at the Ziggit forum
 
-    var rdx = initial;
+    var ptr: [*c]const T = @ptrCast(items.ptr);
+    const end: [*c]const T = @ptrCast(ptr + items.len);
 
-    // reduce in size N chunks...
-    var i: usize = 0;
-    if (comptime std.simd.suggestVectorLength(T)) |N| {
-        while ((i + N) <= items.len) : (i += N) {
-            const vec: @Vector(N, T) = items[i .. i + N][0..N].*; // needs compile time length
-            rdx = @call(.always_inline, BinaryFunc, .{ rdx, @reduce(ReduceType, vec) });
+    var rdx: T = blk: {
+        
+        if (comptime std.simd.suggestVectorLength(T)) |N| {
+
+            if (items.len < N)
+                break :blk initial;
+            
+            var vec_rdx: @Vector(N, T) = @splat(initial);
+
+            while (ptr + N < end) : (ptr += N) {
+                vec_rdx = @call(.always_inline, BinaryFunc, .{ 
+                    vec_rdx, @as(*const @Vector(N, T), @ptrCast(@alignCast(ptr))).* 
+                });
+            }
+            break :blk @reduce(ReduceType, vec_rdx);
+
+        } else {
+            break :blk initial;
         }
+    };
+
+    while(ptr != end) : (ptr += 1) {
+        rdx = @call(.always_inline, BinaryFunc, .{ rdx, ptr.* });
     }
 
-    // reduce remainder...
-    while (i < items.len) : (i += 1) {
-        rdx = @call(.always_inline, BinaryFunc, .{ rdx, items[i] });
-    }
     return rdx;
 }
 
