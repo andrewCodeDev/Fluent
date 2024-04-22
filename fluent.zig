@@ -1463,7 +1463,7 @@ fn simdReduce(
             
             var vec_rdx: @Vector(N, T) = @splat(initial);
 
-            while (ptr + N < end) : (ptr += N) {
+            while (ptr + N <= end) : (ptr += N) {
                 vec_rdx = @call(.always_inline, BinaryFunc, .{ 
                     vec_rdx, @as(*const @Vector(N, T), @ptrCast(@alignCast(ptr))).* 
                 });
