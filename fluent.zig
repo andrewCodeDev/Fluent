@@ -63,11 +63,24 @@ pub fn iterator(
     comptime mode: IteratorMode,
     items: anytype,
 ) BaseIterator(DeepChild(@TypeOf(items)), mode) {
-    const index: usize = comptime if (mode == .forward) 0 else 1;
 
+    const T = DeepChild(@TypeOf(items));
+
+    if (comptime !isSlice(@TypeOf(items))) {
+        return iterator(mode, @as([]const T, items));
+    }
+
+    const P = [*c]const T;
+
+    const ptr: [*c]const T = if (comptime mode == .forward) 
+        @as(P, @ptrCast(items.ptr)) else (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
+
+    const end: [*c]const T = if (comptime mode == .forward) 
+        @as(P, @ptrCast(items.ptr)) + items.len else @as(P, @ptrCast(items.ptr)) - 1;
+    
     return .{
-        .items = items,
-        .index = index,
+        .ptr = ptr,
+        .end = end,
         .stride = 1,
     };
 }
@@ -177,8 +190,8 @@ fn IteratorInterface(
         const Self = @This();
         const Mode = mode;
 
-        items: []const DataType,
-        index: usize,
+        ptr: [*c]const DataType,
+        end: [*c]const DataType,
         stride: usize,
 
         pub fn next(self: *Self) ?DataType {
@@ -187,25 +200,25 @@ fn IteratorInterface(
                 switch (comptime @typeInfo(@TypeOf(filters))) {
                     .Fn => {
                         if (comptime Mode == .forward) {
-                            while (self.index < self.items.len and !filters(self.items[self.index]))
-                                self.index += self.stride;
+                            while (self.ptr < self.end and !filters(self.ptr.*))
+                                self.ptr += self.stride;
                         } else {
-                            while (self.index <= self.items.len and !filters(self.items[self.items.len - self.index]))
-                                self.index += self.stride;
+                            while (self.ptr > self.end and !filters(self.ptr.*))
+                                self.ptr -= self.stride;
                         }
                     },
                     else => outer: { // applies inline filters
                         if (comptime Mode == .forward) {
-                            inner: while (self.index < self.buffer.len) : (self.index += self.stride) {
+                            inner: while (self.ptr < self.end) : (self.ptr += self.stride) {
                                 inline for (filters) |f| {
-                                    if (!f(self.items[self.index])) continue :inner;
+                                    if (!f(self.ptr.*)) continue :inner;
                                 }
                                 break :outer;
                             }
                         } else {
-                            inner: while (self.index <= self.items.len) : (self.index += self.stride) {
+                            inner: while (self.ptr > self.end) : (self.ptr -= self.stride) {
                                 inline for (filters) |f| {
-                                    if (!f(self.items[self.items.len - self.index])) continue :inner;
+                                    if (!f(self.ptr.*)) continue :inner;
                                 }
                                 break :outer;
                             }
@@ -220,15 +233,15 @@ fn IteratorInterface(
 
             switch (comptime Mode) {
                 .forward => {
-                    if (self.index < self.items.len) {
-                        defer self.index += self.stride;
-                        return @call(.always_inline, transform, .{self.items[self.index]});
+                    if (self.ptr < self.end) {
+                        defer self.ptr += self.stride;
+                        return @call(.always_inline, transform, .{ self.ptr.* });
                     }
                 },
                 .reverse => {
-                    if (self.index <= self.items.len) {
-                        defer self.index += self.stride;
-                        return @call(.always_inline, transform, .{self.items[self.items.len - self.index]});
+                    if (self.ptr > self.end) {
+                        defer self.ptr -= self.stride;
+                        return @call(.always_inline, transform, .{ self.ptr.* });
                     }
                 },
             }
@@ -240,8 +253,8 @@ fn IteratorInterface(
             stride_size: usize,
         ) Self {
             return .{
-                .items = self.items,
-                .index = self.index,
+                .ptr = self.ptr,
+                .end = self.end,
                 .stride = stride_size,
             };
         }
@@ -252,20 +265,15 @@ fn IteratorInterface(
         ) ?[]const DataType {
             switch (comptime Mode) {
                 .forward => {
-                    if ((self.index + window_size) <= self.items.len) {
-                        defer {
-                            _ = self.next();
-                        }
-                        return self.items[self.index..][0..window_size];
+                    if (self.ptr + window_size <= self.end) {
+                        defer _ = self.next();
+                        return self.ptr[0..window_size];
                     }
                 },
                 .reverse => {
-                    const pos = self.index - 1;
-                    if ((self.items.len - pos) >= window_size) {
-                        defer {
-                            _ = self.next();
-                        }
-                        return self.items[(self.items.len - pos) - window_size ..][0..window_size];
+                    if ((self.ptr + 1) - window_size > self.end) {
+                        defer _ = self.next();
+                        return ((self.ptr + 1) - window_size)[0..window_size];
                     }
                 },
             }
@@ -277,8 +285,8 @@ fn IteratorInterface(
             comptime new_transforms: anytype,
         ) IteratorInterface(DataType, Mode, filters, new_transforms) {
             return .{
-                .items = self.items,
-                .index = self.index,
+                .ptr = self.ptr,
+                .end = self.end,
                 .stride = self.stride,
             };
         }
@@ -288,8 +296,8 @@ fn IteratorInterface(
             comptime new_filters: anytype,
         ) IteratorInterface(DataType, Mode, new_filters, transforms) {
             return .{
-                .items = self.items,
-                .index = self.index,
+                .ptr = self.ptr,
+                .end = self.end,
                 .stride = self.stride,
             };
         }
@@ -1340,6 +1348,13 @@ fn isConst(comptime T: type) bool {
         .Pointer => |ptr| return ptr.is_const,
         else => @compileError("Type must coercible to a slice."),
     }
+}
+
+fn isSlice(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .Pointer => |ptr| ptr.size == .Slice,
+        else => false,
+    };
 }
 
 fn isInteger(comptime T: type) bool {
@@ -3007,4 +3022,65 @@ test "mapReduce                                 : ConstSelf" {
         .mapReduce(bool, std.ascii.toLower, has_g, false);
 
     try expect(has_result);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+test "iterator                                 : empty range" {
+    const slice: []const u8 = "hello";
+    const empty: []const u8 = slice[0..0];
+    {
+        var itr = Fluent.iterator(.forward, empty);
+        try expect(itr.next() == null);
+    }
+    {
+        var itr = Fluent.iterator(.reverse, empty);
+        try expect(itr.next() == null);
+    }
+    {
+        var itr = Fluent.iterator(.forward, empty);
+        try expect(itr.window(5) == null);
+    }
+    {
+        var itr = Fluent.iterator(.reverse, empty);
+        try expect(itr.window(5) == null);
+    }
+}
+
+test "iterator                                 : next" {
+    {
+        var itr = Fluent.iterator(.forward, "hello");
+        try std.testing.expectEqual(itr.next().?, 'h');
+        try std.testing.expectEqual(itr.next().?, 'e');
+        try std.testing.expectEqual(itr.next().?, 'l');
+        try std.testing.expectEqual(itr.next().?, 'l');
+        try std.testing.expectEqual(itr.next().?, 'o');
+        try expect(itr.next() == null);
+    }
+    {
+        var itr = Fluent.iterator(.reverse, "hello");
+        try std.testing.expectEqual(itr.next().?, 'o');
+        try std.testing.expectEqual(itr.next().?, 'l');
+        try std.testing.expectEqual(itr.next().?, 'l');
+        try std.testing.expectEqual(itr.next().?, 'e');
+        try std.testing.expectEqual(itr.next().?, 'h');
+        try expect(itr.next() == null);
+    }
+}
+
+test "iterator                                 : window" {
+    {
+        var itr = Fluent.iterator(.forward, "hello");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?, "hel");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?, "ell");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?, "llo");
+        try expect(itr.window(3) == null);
+    }
+    {
+        var itr = Fluent.iterator(.reverse, "hello");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?, "llo");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?, "ell");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?, "hel");
+        try expect(itr.window(3) == null);
+    }
 }
