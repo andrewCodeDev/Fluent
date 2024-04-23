@@ -1467,7 +1467,7 @@ fn simdReduce(
     // Special thanks to the user "nyc" over at the Ziggit forum
 
     var ptr: [*c]const T = @ptrCast(items.ptr);
-    const end: [*c]const T = @ptrCast(ptr + items.len);
+    const end: [*c]const T = ptr + items.len;
 
     var rdx: T = blk: {
         
@@ -1490,7 +1490,7 @@ fn simdReduce(
         }
     };
 
-    while(ptr != end) : (ptr += 1) {
+    while(ptr < end) : (ptr += 1) {
         rdx = @call(.always_inline, BinaryFunc, .{ rdx, ptr.* });
     }
 
