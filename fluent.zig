@@ -313,7 +313,7 @@ fn IteratorInterface(
             }
             var count: usize = 0;
             while (count < items.len) : (count += 1) {
-                items[count] = self.next() orelse return (count + 1);
+                items[count] = self.next() orelse return count;
             }
             return count;
         }
