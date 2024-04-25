@@ -1398,7 +1398,7 @@ fn isFloat(comptime T: type) bool {
 }
 
 fn Parameter(comptime T: type, comptime mode: anytype) type {
-    const param_types = std.ComptimeStringMap(type, .{
+    const param_types = std.StaticStringMap(type).initComptime(.{
         .{ "any", []const T },
         .{ "scalar", T },
         .{ "sequence", []const T },
