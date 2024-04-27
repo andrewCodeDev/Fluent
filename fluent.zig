@@ -34,8 +34,8 @@ fn FluentInterface(comptime T: type) type {
             MutableBackend(Self);
 
         pub usingnamespace if (DataType == u8) blk: {
-            break :blk if (isConst(T)) 
-                ImmutableStringBackend(Self) 
+            break :blk if (isConst(T))
+                ImmutableStringBackend(Self)
             else
                 MutableStringBackend(Self);
         } else struct {};
@@ -63,7 +63,6 @@ pub fn iterator(
     comptime mode: IteratorMode,
     items: anytype,
 ) BaseIterator(DeepChild(@TypeOf(items)), mode) {
-
     const T = DeepChild(@TypeOf(items));
 
     if (comptime !isSlice(@TypeOf(items))) {
@@ -72,19 +71,22 @@ pub fn iterator(
 
     const P = [*c]const T;
 
-    const ptr: [*c]const T = if (comptime mode == .forward) 
-        @as(P, @ptrCast(items.ptr)) else (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
+    const ptr: [*c]const T = if (comptime mode == .forward)
+        @as(P, @ptrCast(items.ptr))
+    else
+        (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
 
-    const end: [*c]const T = if (comptime mode == .forward) 
-        @as(P, @ptrCast(items.ptr)) + items.len else @as(P, @ptrCast(items.ptr)) - 1;
-    
+    const end: [*c]const T = if (comptime mode == .forward)
+        @as(P, @ptrCast(items.ptr)) + items.len
+    else
+        @as(P, @ptrCast(items.ptr)) - 1;
+
     return .{
         .ptr = ptr,
         .end = end,
         .stride = 1,
     };
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // UNARY FUNCTION ADAPTER :                                                   //
@@ -229,19 +231,21 @@ fn IteratorInterface(
 
             // unpack transforms into single transform call
             const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .Fn)
-                transforms else Fluent.chain(transforms).call;
+                transforms
+            else
+                Fluent.chain(transforms).call;
 
             switch (comptime Mode) {
                 .forward => {
                     if (self.ptr < self.end) {
                         defer self.ptr += self.stride;
-                        return @call(.always_inline, transform, .{ self.ptr.* });
+                        return @call(.always_inline, transform, .{self.ptr.*});
                     }
                 },
                 .reverse => {
                     if (self.ptr > self.end) {
                         defer self.ptr -= self.stride;
-                        return @call(.always_inline, transform, .{ self.ptr.* });
+                        return @call(.always_inline, transform, .{self.ptr.*});
                     }
                 },
             }
@@ -477,7 +481,7 @@ fn ImmutableBackend(comptime Self: type) type {
                 const b: usize = @max(a, @min(j, self.items.len));
                 return .{ .items = if (a < b) self.items[a..b] else self.items[0..0] };
             } else if (comptime I != J) { // default to isize version
-                    self.slice(@as(isize, @intCast(i)), @as(isize, @intCast(j)));
+                self.slice(@as(isize, @intCast(i)), @as(isize, @intCast(j)));
             } else {
                 const l: isize = @intCast(self.items.len);
                 const a: usize = wrapIndex(self.items.len, @min(@max(-l, i), l));
@@ -889,12 +893,7 @@ fn MutableBackend(comptime Self: type) type {
             };
         }
 
-        fn replaceFirst(
-            self: Self,
-            comptime mode: FluentMode,
-            this: Parameter(Self.DataType, mode),
-            with: Parameter(Self.DataType, mode)
-        ) Self {
+        fn replaceFirst(self: Self, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
             switch (mode) {
                 .scalar => for (self.items) |*item| {
                     if (item.* != this) continue;
@@ -981,7 +980,7 @@ fn MutableBackend(comptime Self: type) type {
                     std.debug.assert(this.len == with.len);
                     var win_iter = self.iterator(.forward);
                     var offset: usize = 0;
-                    while (win_iter.window(this.len)) |win| : (offset += 1) {                        
+                    while (win_iter.window(this.len)) |win| : (offset += 1) {
                         if (std.mem.eql(Self.DataType, win, this))
                             _ = replaceRange(self, offset, offset + with.len, mode, with);
                     }
@@ -1398,7 +1397,7 @@ fn isFloat(comptime T: type) bool {
 }
 
 fn Parameter(comptime T: type, comptime mode: anytype) type {
-    const param_types = std.StaticStringMap(type).initComptime(.{
+    const param_types = std.ComptimeStringMap(type, .{
         .{ "any", []const T },
         .{ "scalar", T },
         .{ "sequence", []const T },
@@ -1470,27 +1469,22 @@ fn simdReduce(
     const end: [*c]const T = ptr + items.len;
 
     var rdx: T = blk: {
-        
         if (comptime std.simd.suggestVectorLength(T)) |N| {
-
             if (items.len < N)
                 break :blk initial;
-            
+
             var vec_rdx: @Vector(N, T) = @splat(initial);
 
             while (ptr + N <= end) : (ptr += N) {
-                vec_rdx = @call(.always_inline, BinaryFunc, .{ 
-                    vec_rdx, @as(*const @Vector(N, T), @ptrCast(@alignCast(ptr))).* 
-                });
+                vec_rdx = @call(.always_inline, BinaryFunc, .{ vec_rdx, @as(*const @Vector(N, T), @ptrCast(@alignCast(ptr))).* });
             }
             break :blk @reduce(ReduceType, vec_rdx);
-
         } else {
             break :blk initial;
         }
     };
 
-    while(ptr < end) : (ptr += 1) {
+    while (ptr < end) : (ptr += 1) {
         rdx = @call(.always_inline, BinaryFunc, .{ rdx, ptr.* });
     }
 
