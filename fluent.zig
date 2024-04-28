@@ -1369,7 +1369,7 @@ const SampleOption = enum {
 };
 
 // any, sequence, scalar
-pub const FluentMode = std.mem.DelimiterType;
+const FluentMode = std.mem.DelimiterType;
 
 ////////////////////////////////////////////////////////////////////////////////
 // PRIVATE HELPERS :                                                          //
