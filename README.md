@@ -168,6 +168,34 @@ Standard Iterators:
 split       - splits a sequence on a given delimiter
 tokenize    - tokenizes a sequence on a given delimiter  
 ```
+# REGEX - (PCRE Standard)
+
+### Special Characters:
+```
+\d - digits
+\D - no-digits
+\w - alphanumeric
+\W - no-alphanumeric
+\s - whitespace
+\S - no-whitespace
+ . - any character
+```
+#### Quantifiers:
+```
++ - one or more
+* - any quantity
+? - none or one
+{n} - exactly n
+{m,n} - between m and n (inclusive)
+```
+### Operators:
+```
+| - or clause
+() - capture group
+[] - character set
+[^] - negated character set
+```
+
 
 ### Simple Argument Processing example :
 
