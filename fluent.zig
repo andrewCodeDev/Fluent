@@ -1403,7 +1403,7 @@ fn isUnsigned(comptime T: type) bool {
     };
 }
 
-pub fn tupleSize(comptime tuple: anytype) usize {
+fn tupleSize(comptime tuple: anytype) usize {
     return switch (@typeInfo(@TypeOf(tuple))) {
         .Struct => |s| s.fields.len,
         else => @compileError("type must be a tuple"),
@@ -1582,31 +1582,31 @@ const SQ = union(enum) {
 };
 
 
-pub fn isRegexFilter(symbol: RegexEscaped) bool {
+fn isRegexFilter(symbol: RegexEscaped) bool {
     return symbol.escaped and switch (symbol.char) {
         'w', 'W', 's', 'S', 'd', 'D', '.' => true, else => false
     };   
 }
 
-pub fn isRegexQuantifier(symbol: RegexEscaped) bool {
+fn isRegexQuantifier(symbol: RegexEscaped) bool {
     return !symbol.escaped and switch (symbol.char) {
         '+', '?', '*', '{' => true, else => false
     };   
 }
 
-pub fn isRegexBracket(symbol: RegexCharacter) bool {
+fn isRegexBracket(symbol: RegexCharacter) bool {
     return !symbol.escaped and switch (symbol.char) {
         '(', ')', '[', ']' => true, else => false
     };   
 }
 
-pub fn bracketSet(comptime symbol: RegexCharacter) []const u8 {
+fn bracketSet(comptime symbol: RegexCharacter) []const u8 {
     const head: u8 = if (symbol.char == '(') '(' else '[';
     const tail: u8 = if (symbol.char == '(') ')' else ']';
     return &.{ head, tail };
 }
 
-pub fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
+fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
     comptime var count: usize = 0;
     comptime var coefficient: usize = 1;
     comptime var i: usize = escaped.len;
@@ -1625,7 +1625,7 @@ pub fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
     return count;
 }
 
-pub fn fuseEscapes(
+fn fuseEscapes(
     comptime str: []const u8, 
 ) []const RegexEscaped {
 
@@ -1672,7 +1672,7 @@ pub fn fuseEscapes(
 }
 
 
-pub fn fuseQuantifiers(
+fn fuseQuantifiers(
     comptime es: []const RegexEscaped, 
 ) []const SQ {
 
@@ -1814,7 +1814,7 @@ pub fn fuseQuantifiers(
     }
 }
 
-pub fn closingBracket(
+fn closingBracket(
     comptime sq: []const SQ,
     comptime braces: []const u8,
     comptime idx: usize,
@@ -1838,7 +1838,7 @@ pub fn closingBracket(
     @compileError("closingBracket: no closing brace found");
 }
 
-pub fn closingBracketEscaped(
+fn closingBracketEscaped(
     comptime es: []const RegexEscaped,
     comptime braces: []const u8,
     comptime idx: usize,
@@ -1857,7 +1857,7 @@ pub fn closingBracketEscaped(
     @compileError("closingBracket: no closing brace found");
 }
 
-pub fn sameLevelSearch(
+fn sameLevelSearch(
     comptime sq: []const SQ,
     comptime char: u8,
     comptime idx: usize,
@@ -1879,7 +1879,7 @@ pub fn sameLevelSearch(
     return i;
 }
 
-pub fn RegexOR(
+fn RegexOR(
     // used for "|" or [abc] clauses
     comptime lhs: type,
     comptime rhs: type,
@@ -1895,7 +1895,7 @@ pub fn RegexOR(
     };
 }
 
-pub fn RegexAND(
+fn RegexAND(
     // used for anything outside of [] clauses,
     comptime this: type,
     comptime next: type,
@@ -1913,7 +1913,7 @@ pub fn RegexAND(
     };
 }
 
-pub fn RegexNAND(
+fn RegexNAND(
     // only used for [^abc] type clauses,
     // should only appear in that context 
     comptime this: type,
@@ -1932,7 +1932,7 @@ pub fn RegexNAND(
     };
 }
 
-pub fn RegexUnit(
+fn RegexUnit(
     comptime callable: anytype,
     comptime quantifier: ?RegexQuantifier,
 ) type {
@@ -2031,7 +2031,7 @@ pub fn RegexUnit(
     };
 }
 
-pub fn ParseRegexTreeBreadth(
+fn ParseRegexTreeBreadth(
     comptime sq: []const SQ,
     comptime enclosing: u8,
 ) type {
@@ -2076,7 +2076,7 @@ fn anyRegex(_: u8) bool {
     return true; 
 }
 
-pub fn ParseRegexTreeDepth(
+fn ParseRegexTreeDepth(
     comptime sq: []const SQ,
     comptime enclosing: u8,
 ) type {
@@ -2165,7 +2165,7 @@ pub fn ParseRegexTreeDepth(
     }
 }
 
-pub fn ParseRegexTree(
+fn ParseRegexTree(
     comptime expression: []const u8,
 ) type {
     return comptime ParseRegexTreeBreadth(fuseQuantifiers(fuseEscapes(expression)), '(');
@@ -3749,11 +3749,6 @@ test "regex:                                    : match iterator" {
         var itr = match("\\d{3}", "123456");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "123");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "456");
-        try std.testing.expect(itr.next() == null);
-    }
-    { // match special characters (typical) - between
-        var itr = match("\\d{3,4}", "123456");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "1234");
         try std.testing.expect(itr.next() == null);
     }
     { // match special characters (typical) - between
