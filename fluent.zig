@@ -1639,7 +1639,7 @@ fn fuseEscapes(
     }
     
     // the symbol stack to return
-    comptime var symbols: [str.len]RegexEscaped = undefined;
+    comptime var es: [str.len]RegexEscaped = undefined;
 
     // track if last char was escape - '\'
     comptime var escaped: bool = false;
@@ -1654,7 +1654,7 @@ fn fuseEscapes(
             continue;               
         }
 
-        symbols[idx] = .{ .escaped = escaped, .char = char };
+        es[idx] = .{ .escaped = escaped, .char = char };
 
         escaped = false;
 
@@ -1665,10 +1665,43 @@ fn fuseEscapes(
         @compileError("fuseEscapes: unused escape symbol");
     }
 
-    // freeze comptime state
-    const symbols_ = symbols;
+    // TODO: consider moving below to separate function
 
-    return symbols_[0..idx];
+    { // correct optional ordering:
+        // a?a      -> aa?
+        // a?a+     -> a+a?
+        // a?a*     -> a*a?
+        // a?a{n}   -> a{n}a?
+        // a?a{n,m} -> a{n,m}a?
+        var i: usize = 0;
+        var j: usize = 2;
+        while (j < es.len) : ({ i += 1; j += 1; }) {
+
+            // check for unescaped ? betwen both indices
+            if (es[i + 1].char == '?' and !es[i + 1].escaped) {
+
+                // both sides have to be the same symbol
+                if(es[i].char != es[j].char or es[i].escaped != es[j].escaped)
+                    continue;
+
+                // pickup the right-side quantifier if it exists
+                if ((j + 1) < es.len and  !es[j + 1].escaped){
+                    switch (es[j + 1].char) {
+                        '+', '*', '?' => std.mem.rotate(RegexEscaped, es[i..j+2], 2),
+                        '{' => std.mem.rotate(RegexEscaped, es[i..closingBracketEscaped(es[0..], "{}", j+1) + 1], 2),
+                        else => std.mem.rotate(RegexEscaped, es[i..j+1], 2)
+                    }
+                } else {
+                    std.mem.rotate(RegexEscaped, es[i..j+1], 2);
+                }
+            }
+        }
+    }
+
+    // freeze comptime state
+    const es_ = es;
+
+    return es_[0..idx];
 }
 
 
