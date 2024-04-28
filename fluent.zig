@@ -1808,6 +1808,7 @@ fn fuseQuantifiers(
             // certain charactes can be skipped.
             i += 1;
         }
+        
         const _sq = sq;
 
         return _sq[0..i];
@@ -1901,7 +1902,6 @@ fn RegexAND(
 ) type {
     return struct {
         pub fn call(str: []const u8, i: usize) ?usize {
-            if (i >= str.len) return null;
             const j = this.call(str, i) orelse return null;
             if (comptime @hasDecl(next, "call")) {
                 return next.call(str, j);
@@ -1920,7 +1920,6 @@ fn RegexNAND(
 ) type {
     return struct {
         pub fn call(str: []const u8, i: usize) ?usize {
-            if (i >= str.len) return null;
             const j = this.call(str, i) orelse return null;
             if (comptime @hasDecl(next, "call")) {
                 return next.call(str, i);
@@ -1972,13 +1971,13 @@ fn RegexUnit(
                         if (count < 1)
                             return null;
                     },
-                    .optional => {
-                        if (callable(str[idx])) idx += 1;
+                    .optional => { // can be empty
+                        if (idx < str.len and callable(str[idx])) idx += 1;
                     }
                 }
                 return idx;
             } else {
-                return if (callable(str[i])) i + 1 else null;
+                return if (i < str.len and callable(str[i])) i + 1 else null;
             }
         }
     } else struct {
@@ -2018,8 +2017,9 @@ fn RegexUnit(
                         if (count < 1)
                             return null;
                     },
-                    .optional => {
-                        idx += callable.call(str[idx..], 0) orelse @as(usize, 0);
+                    .optional => { // can be empty
+                        if (idx < str.len)                            
+                            idx += callable.call(str[idx..], 0) orelse @as(usize, 0);
                     }
                 }
                 return idx;
