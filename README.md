@@ -180,7 +180,7 @@ tokenize    - tokenizes a sequence on a given delimiter
 \S - no-whitespace
  . - any character
 ```
-#### Quantifiers:
+### Quantifiers:
 ```
 + - one or more
 * - any quantity
