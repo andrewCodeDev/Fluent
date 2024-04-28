@@ -1,6 +1,6 @@
 ![fluent](https://github.com/andrewCodeDev/Fluent/assets/54549221/6064d88a-ff2a-4970-a494-a432a8e74515)
 
-A fluent-interface and iterators for chaining algorithms over slices.
+A fluent-interface for chaining algorithms, iterating, and performing REGEX over slices. 
 
 # Examples
 
@@ -42,7 +42,7 @@ Set stride and iteratively produce slice-windows:
 ```Zig
 var itr = Fluent
     .iterator(.forward, items[0..])
-    .strided(2)
+    .strided(2);
 
 while (itr.window(4)) |window| { // ...
 ```
@@ -59,7 +59,16 @@ var itr = Fluent
         skipInfs,
     });
 
-while (itr.next()) |value| { //...
+while (itr.next()) |value| { // ...
+```
+Use REGEX to find all substrings starting with a, b, or c followed by digits in a string:
+
+```Zig
+
+var itr = Fluent.match("[abc]\\d+", "_ab112_c987b123_d16_");
+
+while (itr.next) |substr| { // ...
+
 ```
 
 # Installation
