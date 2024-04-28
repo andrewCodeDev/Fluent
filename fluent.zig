@@ -3805,4 +3805,11 @@ test "regex:                                    : match iterator" {
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "_x_");
         try std.testing.expect(itr.next() == null);
     }
+    { // character sets (compound)
+        var itr = match("[abc]\\d+", "_ab112_c987b123_d16_");
+        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "b112");
+        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "c987");
+        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "b123");
+        try std.testing.expect(itr.next() == null);
+    }
 }
