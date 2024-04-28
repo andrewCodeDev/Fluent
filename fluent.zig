@@ -1857,20 +1857,19 @@ fn closingBracketEscaped(
     @compileError("closingBracket: no closing brace found");
 }
 
-fn sameLevelSearch(
+fn pipeSearch(
     comptime sq: []const SQ,
-    comptime char: u8,
     comptime idx: usize,
 ) usize {
     comptime var i: usize = idx;
     while (i < sq.len) : (i += 1) {
         switch (sq[i]) {
             .s => |s| switch (s.char) {
-                char => return i,
+                '|' => if (s.escaped) continue else return i,
                 '(' => i = closingBracket(sq, "()", i),
                 '[' => i = closingBracket(sq, "[]", i),
                 '{' => i = closingBracket(sq, "{}", i),
-                ')', ']', '}' => @compileError("sameLevelSearch: invalid braces"),
+                ')', ']', '}' => @compileError("pipeSearch: invalid braces"),
                 else => continue,
             },
             else => continue,
@@ -2039,7 +2038,7 @@ fn ParseRegexTreeBreadth(
         if (sq.len == 0)
             return struct {}; // terminal node
 
-        const pipe: usize = sameLevelSearch(sq, '|', 0);
+        const pipe: usize = pipeSearch(sq, 0);
 
         if (pipe < sq.len) {
             return RegexOR(
