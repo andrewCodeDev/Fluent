@@ -1570,6 +1570,7 @@ const RegexEscaped = struct {
 };
 
 const RegexCharacter = struct {
+    in_set: bool, // are we a regex char set?
     escaped: bool,
     negated: bool,
     char: u8,
@@ -1667,43 +1668,52 @@ fn fuseEscapes(
 
     // TODO: consider moving below to separate function
 
-    { // correct optional ordering:
-        // a?a      -> aa?
-        // a?a+     -> a+a?
-        // a?a*     -> a*a?
-        // a?a{n}   -> a{n}a?
-        // a?a{n,m} -> a{n,m}a?
-        var i: usize = 0;
-        var j: usize = 2;
-        while (j < es.len) : ({ i += 1; j += 1; }) {
-
-            // check for unescaped ? betwen both indices
-            if (es[i + 1].char == '?' and !es[i + 1].escaped) {
-
-                // both sides have to be the same symbol
-                if(es[i].char != es[j].char or es[i].escaped != es[j].escaped)
-                    continue;
-
-                // pickup the right-side quantifier if it exists
-                if ((j + 1) < es.len and  !es[j + 1].escaped){
-                    switch (es[j + 1].char) {
-                        '+', '*', '?' => std.mem.rotate(RegexEscaped, es[i..j+2], 2),
-                        '{' => std.mem.rotate(RegexEscaped, es[i..closingBracketEscaped(es[0..], "{}", j+1) + 1], 2),
-                        else => std.mem.rotate(RegexEscaped, es[i..j+1], 2)
-                    }
-                } else {
-                    std.mem.rotate(RegexEscaped, es[i..j+1], 2);
-                }
-            }
-        }
-    }
-
     // freeze comptime state
     const es_ = es;
 
     return es_[0..idx];
 }
 
+fn analyzeRegexTokens(
+    comptime sq: []const SQ
+) []const SQ {
+    
+    comptime {
+
+        const tag = std.meta.activeTag;
+
+        var i: usize = 0;
+        var j: usize = 2;
+        while (j < sq.len) : ({ i += 1; j += 1; }) {
+
+            if (tag(sq[i]) == .s and tag(sq[j]) == .s) {
+
+                if (tag(sq[i+1]) != .q)
+                    continue;
+
+                const a = sq[i].s;
+                const b = sq[j].s;
+                    
+                if (!std.meta.eql(a, b))
+                    continue;
+
+                const q = sq[i+1].q;
+
+                if (tag(q) != .optional) {
+                    const fmt: []const u8 = &[_]u8{ ' ', a.char, '-' } ++ @tagName(tag(q)) ++ &[_]u8{ '-', b.char };
+                    @compileError("Invalid quantifier sequence:" ++ fmt);
+                }
+                // only a?a? is valid - check for just a?a sequences
+                if (j+1 >= sq.len or tag(sq[j+1]) != .q or tag(sq[j+1].q) != .optional) {
+                    const fmt: []const u8 = &[_]u8{ ' ', a.char, '-' } ++ @tagName(tag(q)) ++ &[_]u8{ '-', b.char };
+                    @compileError("Invalid optional ordering:" ++ fmt);
+                }
+            }
+        }
+
+        return sq;
+    }
+}
 
 fn fuseQuantifiers(
     comptime es: []const RegexEscaped, 
@@ -1761,6 +1771,7 @@ fn fuseQuantifiers(
                 };
 
                 sq[i] = .{ .s = .{ 
+                    .in_set = in_square,
                     .escaped = es[j].escaped or override_bracket,
                     .negated = negated and in_square,
                     .char = es[j].char,
@@ -1844,7 +1855,7 @@ fn fuseQuantifiers(
         
         const _sq = sq;
 
-        return _sq[0..i];
+        return analyzeRegexTokens(_sq[0..i]);
     }
 }
 
