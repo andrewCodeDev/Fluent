@@ -1570,7 +1570,7 @@ const RegexEscaped = struct {
 };
 
 const RegexCharacter = struct {
-    in_set: bool, // are we a regex char set?
+    in_square: bool, // are we a regex char set?
     escaped: bool,
     negated: bool,
     char: u8,
@@ -1710,7 +1710,6 @@ fn analyzeRegexTokens(
                 }
             }
         }
-
         return sq;
     }
 }
@@ -1770,8 +1769,10 @@ fn fuseQuantifiers(
                     '(', ')', '[', ']', '{', '}' => (j != square_head and j != square_tail), else => false,
                 };
 
+
                 sq[i] = .{ .s = .{ 
-                    .in_set = in_square,
+                    // we don't want square brackets to be within themselves...
+                    .in_square = in_square and j != square_head and j != square_tail,
                     .escaped = es[j].escaped or override_bracket,
                     .negated = negated and in_square,
                     .char = es[j].char,
@@ -2115,6 +2116,16 @@ fn EqualRegex(
     return struct { pub fn call(c: u8) bool { return c == char; } }.call;
 }
 
+fn SpanRegex(
+    comptime a: u8,
+    comptime b: u8,
+) fn (u8) bool {
+    if (comptime a >= b)
+        @compileError("Invalid character span: " ++ &[_]u8{ a, '-', 'b' });
+
+    return struct { pub fn call(c: u8) bool { return a <= c and c <= b; } }.call;
+}
+
 fn anyRegex(_: u8) bool { 
     return true; 
 }
@@ -2124,6 +2135,8 @@ fn ParseRegexTreeDepth(
     comptime enclosing: u8,
 ) type {
     comptime {
+
+        const tag = std.meta.activeTag;
 
         if (sq.len == 0)
             return struct {}; // terminal node
@@ -2163,6 +2176,16 @@ fn ParseRegexTreeDepth(
                 }
 
                 use_nand = s.negated;
+
+                // implements [a-z] character spans...
+                if (_sq.len >= 3 and tag(_sq[1]) == .s and tag(_sq[2]) == .s) {
+                    const t = _sq[1].s;
+                    const u = _sq[2].s;
+                    if (t.char == '-' and u.in_square) {
+                        _sq = _sq[3..];
+                        break :outer RegexUnit(InvertRegex(true, s.negated, SpanRegex(s.char, u.char)), null);
+                    }
+                }
 
                 _sq = _sq[1..]; // pop token
 
@@ -3848,6 +3871,13 @@ test "regex:                                    : match iterator" {
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "b112");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "c987");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "b123");
+        try std.testing.expect(itr.next() == null);
+    }
+    { // character sets (spans)
+        var itr = Fluent.match("[a-zA-Z]+", "bb12avxz34CBF");
+        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "bb");
+        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "avxz");
+        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "CBF");
         try std.testing.expect(itr.next() == null);
     }
 }
