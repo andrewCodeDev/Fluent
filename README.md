@@ -67,7 +67,7 @@ Use REGEX to find all substrings starting with a, b, or c followed by digits in 
 
 var itr = Fluent.match("[abc]\\d+", "_ab112_c987b123_d16_");
 
-while (itr.next) |substr| { // ...
+while (itr.next()) |substr| { // ...
 
 ```
 
@@ -194,10 +194,10 @@ tokenize    - tokenizes a sequence on a given delimiter
 () - capture group
 [] - character set
 [^] - negated character set
+[a-z] - character spans
 ```
 
-
-### Simple Argument Processing example :
+### Simple Argument Processing example:
 
 ```zig
 const std = @import("std");
