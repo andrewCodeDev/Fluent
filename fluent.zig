@@ -1708,7 +1708,33 @@ fn analyzeRegexTokens(comptime sq: []const RegexSymbol) []const RegexSymbol {
                 }
             }
         }
-        return sq;
+
+        // backtracking optimizations
+        var _sq: [sq.len]RegexSymbol = sq[0..].*;
+
+        i = 0;
+        while (i < _sq.len) : (i += 1){
+
+            if (tag(_sq[i]) != .s or i + 3 > _sq.len)
+                continue;
+
+            //@compileLog("In loop");
+
+            const s = _sq[i].s;
+
+            // convert .*a -> ~a*a (only if a is not a bracket)
+            if (s.char == '.' and !s.escaped and tag(_sq[i + 1]) == .q and tag(_sq[i + 2]) == .s) {
+                const u = _sq[i + 2].s;
+                if (isRegexBracket(u))
+                    continue;
+
+                //@compileLog(u);
+                _sq[i] = .{ .s = u };
+                _sq[i].s.negated = true;
+            }
+        }
+        const __sq = _sq;
+        return __sq[0..];
     }
 }
 
@@ -1760,8 +1786,8 @@ fn fuseQuantifiers(
                 last_quantifier = false;
 
                 // every bracket within an [] clause is escaped
-                const override_bracket: bool = in_square and switch (es[j].char) {
-                    '(', ')', '[', ']', '{', '}' => (j != square_head and j != square_tail),
+                const override_escape: bool = in_square and switch (es[j].char) {
+                    '(', ')', '[', ']', '{', '}', '.' => (j != square_head and j != square_tail),
                     else => false,
                 };
 
@@ -1769,7 +1795,7 @@ fn fuseQuantifiers(
                     .s = .{
                         // we don't want square brackets to be within themselves...
                         .in_square = in_square and j != square_head and j != square_tail,
-                        .escaped = es[j].escaped or override_bracket,
+                        .escaped = es[j].escaped or override_escape,
                         .negated = negated and in_square,
                         .char = es[j].char,
                     },
@@ -2181,7 +2207,7 @@ fn ParseRegexTreeDepth(
                     break :outer if (q) |_q| RegexUnit(T, _q) else T;
                 }
 
-                use_nand = s.negated;
+                use_nand = s.negated and s.in_square;
 
                 // implements [a-z] character spans...
                 if (_sq.len >= 3 and s.in_square and tag(_sq[1]) == .s and tag(_sq[2]) == .s) {
@@ -3882,6 +3908,11 @@ test "regex:                                    : match iterator" {
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "bb");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "avxz");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "CBF");
+        try std.testing.expect(itr.next() == null);
+    }
+    { // backtracking optimization
+        var itr = Fluent.match("\".*\"", "xxx\"Hello, World!\"xxx");
+        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "\"Hello, World!\"");
         try std.testing.expect(itr.next() == null);
     }
 }
