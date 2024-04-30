@@ -34,8 +34,8 @@ fn FluentInterface(comptime T: type) type {
             MutableBackend(Self);
 
         pub usingnamespace if (DataType == u8) blk: {
-            break :blk if (isConst(T)) 
-                ImmutableStringBackend(Self) 
+            break :blk if (isConst(T))
+                ImmutableStringBackend(Self)
             else
                 MutableStringBackend(Self);
         } else struct {};
@@ -63,7 +63,6 @@ pub fn iterator(
     comptime mode: IteratorMode,
     items: anytype,
 ) BaseIterator(DeepChild(@TypeOf(items)), mode) {
-
     const T = DeepChild(@TypeOf(items));
 
     if (comptime !isSlice(@TypeOf(items))) {
@@ -72,19 +71,22 @@ pub fn iterator(
 
     const P = [*c]const T;
 
-    const ptr: [*c]const T = if (comptime mode == .forward) 
-        @as(P, @ptrCast(items.ptr)) else (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
+    const ptr: [*c]const T = if (comptime mode == .forward)
+        @as(P, @ptrCast(items.ptr))
+    else
+        (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
 
-    const end: [*c]const T = if (comptime mode == .forward) 
-        @as(P, @ptrCast(items.ptr)) + items.len else @as(P, @ptrCast(items.ptr)) - 1;
-    
+    const end: [*c]const T = if (comptime mode == .forward)
+        @as(P, @ptrCast(items.ptr)) + items.len
+    else
+        @as(P, @ptrCast(items.ptr)) - 1;
+
     return .{
         .ptr = ptr,
         .end = end,
         .stride = 1,
     };
 }
-
 
 pub fn MatchIterator(
     comptime expression: []const u8,
@@ -98,7 +100,7 @@ pub fn MatchIterator(
         pub fn init(items: []const u8) Self {
             return .{ .items = items, .index = 0 };
         }
-        
+
         pub fn next(self: *Self) ?[]const u8 {
             while (self.index < self.items.len) : (self.index += 1) {
                 if (tree.call(self.items[self.index..], 0)) |last| {
@@ -261,19 +263,21 @@ fn IteratorInterface(
 
             // unpack transforms into single transform call
             const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .Fn)
-                transforms else Fluent.chain(transforms).call;
+                transforms
+            else
+                Fluent.chain(transforms).call;
 
             switch (comptime Mode) {
                 .forward => {
                     if (self.ptr < self.end) {
                         defer self.ptr += self.stride;
-                        return @call(.always_inline, transform, .{ self.ptr.* });
+                        return @call(.always_inline, transform, .{self.ptr.*});
                     }
                 },
                 .reverse => {
                     if (self.ptr > self.end) {
                         defer self.ptr -= self.stride;
-                        return @call(.always_inline, transform, .{ self.ptr.* });
+                        return @call(.always_inline, transform, .{self.ptr.*});
                     }
                 },
             }
@@ -509,7 +513,7 @@ fn ImmutableBackend(comptime Self: type) type {
                 const b: usize = @max(a, @min(j, self.items.len));
                 return .{ .items = if (a < b) self.items[a..b] else self.items[0..0] };
             } else if (comptime I != J) { // default to isize version
-                    self.slice(@as(isize, @intCast(i)), @as(isize, @intCast(j)));
+                self.slice(@as(isize, @intCast(i)), @as(isize, @intCast(j)));
             } else {
                 const l: isize = @intCast(self.items.len);
                 const a: usize = wrapIndex(self.items.len, @min(@max(-l, i), l));
@@ -921,12 +925,7 @@ fn MutableBackend(comptime Self: type) type {
             };
         }
 
-        fn replaceFirst(
-            self: Self,
-            comptime mode: FluentMode,
-            this: Parameter(Self.DataType, mode),
-            with: Parameter(Self.DataType, mode)
-        ) Self {
+        fn replaceFirst(self: Self, comptime mode: FluentMode, this: Parameter(Self.DataType, mode), with: Parameter(Self.DataType, mode)) Self {
             switch (mode) {
                 .scalar => for (self.items) |*item| {
                     if (item.* != this) continue;
@@ -1013,7 +1012,7 @@ fn MutableBackend(comptime Self: type) type {
                     std.debug.assert(this.len == with.len);
                     var win_iter = self.iterator(.forward);
                     var offset: usize = 0;
-                    while (win_iter.window(this.len)) |win| : (offset += 1) {                        
+                    while (win_iter.window(this.len)) |win| : (offset += 1) {
                         if (std.mem.eql(Self.DataType, win, this))
                             _ = replaceRange(self, offset, offset + with.len, mode, with);
                     }
@@ -1502,27 +1501,22 @@ fn simdReduce(
     const end: [*c]const T = ptr + items.len;
 
     var rdx: T = blk: {
-        
         if (comptime std.simd.suggestVectorLength(T)) |N| {
-
             if (items.len < N)
                 break :blk initial;
-            
+
             var vec_rdx: @Vector(N, T) = @splat(initial);
 
             while (ptr + N <= end) : (ptr += N) {
-                vec_rdx = @call(.always_inline, BinaryFunc, .{ 
-                    vec_rdx, @as(*const @Vector(N, T), @ptrCast(@alignCast(ptr))).* 
-                });
+                vec_rdx = @call(.always_inline, BinaryFunc, .{ vec_rdx, @as(*const @Vector(N, T), @ptrCast(@alignCast(ptr))).* });
             }
             break :blk @reduce(ReduceType, vec_rdx);
-
         } else {
             break :blk initial;
         }
     };
 
-    while(ptr < end) : (ptr += 1) {
+    while (ptr < end) : (ptr += 1) {
         rdx = @call(.always_inline, BinaryFunc, .{ rdx, ptr.* });
     }
 
@@ -1577,28 +1571,30 @@ const RegexCharacter = struct {
 };
 
 // TODO: change to RegexSymbol?
-const SQ = union(enum) {
+const RegexSymbol = union(enum) {
     s: RegexCharacter,
-    q: RegexQuantifier,        
+    q: RegexQuantifier,
 };
-
 
 fn isRegexFilter(symbol: RegexEscaped) bool {
     return symbol.escaped and switch (symbol.char) {
-        'w', 'W', 's', 'S', 'd', 'D', '.' => true, else => false
-    };   
+        'w', 'W', 's', 'S', 'd', 'D', '.' => true,
+        else => false,
+    };
 }
 
 fn isRegexQuantifier(symbol: RegexEscaped) bool {
     return !symbol.escaped and switch (symbol.char) {
-        '+', '?', '*', '{' => true, else => false
-    };   
+        '+', '?', '*', '{' => true,
+        else => false,
+    };
 }
 
 fn isRegexBracket(symbol: RegexCharacter) bool {
     return !symbol.escaped and switch (symbol.char) {
-        '(', ')', '[', ']' => true, else => false
-    };   
+        '(', ')', '[', ']' => true,
+        else => false,
+    };
 }
 
 fn bracketSet(comptime symbol: RegexCharacter) []const u8 {
@@ -1612,7 +1608,6 @@ fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
     comptime var coefficient: usize = 1;
     comptime var i: usize = escaped.len;
     while (i > 0) {
-
         i -= 1;
 
         if (comptime !std.ascii.isDigit(escaped[i].char)) {
@@ -1627,10 +1622,10 @@ fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
 }
 
 fn fuseEscapes(
-    comptime str: []const u8, 
+    comptime str: []const u8,
 ) []const RegexEscaped {
 
-    // TODO: 
+    // TODO:
     //   consider making this return a direct
     //   array instead a slice - we don't need
     //   to keep it around for runtime
@@ -1638,7 +1633,7 @@ fn fuseEscapes(
     if (comptime str.len == 0) {
         @compileError("fuseEscapes: cannot parse empty string");
     }
-    
+
     // the symbol stack to return
     comptime var es: [str.len]RegexEscaped = undefined;
 
@@ -1648,11 +1643,13 @@ fn fuseEscapes(
     // current symbol index
     comptime var idx: usize = 0;
 
+    // TODO check for invalid escape character
+    //'w', 'W', 's', 'S', 'd', 'D', '.', '(', ')', '[', ']'
+    // '+', '?', '*', '{', '-'
     for (str) |char| {
-
         if (char == '\\' and !escaped) {
             escaped = true;
-            continue;               
+            continue;
         }
 
         es[idx] = .{ .escaped = escaped, .char = char };
@@ -1674,37 +1671,38 @@ fn fuseEscapes(
     return es_[0..idx];
 }
 
-fn analyzeRegexTokens(
-    comptime sq: []const SQ
-) []const SQ {
-    
+fn analyzeRegexTokens(comptime sq: []const RegexSymbol) []const RegexSymbol {
     comptime {
-
         const tag = std.meta.activeTag;
 
         var i: usize = 0;
         var j: usize = 2;
-        while (j < sq.len) : ({ i += 1; j += 1; }) {
-
+        while (j < sq.len) : ({
+            i += 1;
+            j += 1;
+        }) {
+            // any quantifier that is followed by an identical character is either invalid or idempotent
+            // a + a  -> invalid
+            // a + a? -> idempotent
             if (tag(sq[i]) == .s and tag(sq[j]) == .s) {
-
-                if (tag(sq[i+1]) != .q)
+                if (tag(sq[i + 1]) != .q)
                     continue;
 
                 const a = sq[i].s;
                 const b = sq[j].s;
-                    
+
                 if (!std.meta.eql(a, b))
                     continue;
 
-                const q = sq[i+1].q;
+                const q = sq[i + 1].q;
 
                 if (tag(q) != .optional) {
                     const fmt: []const u8 = &[_]u8{ ' ', a.char, '-' } ++ @tagName(tag(q)) ++ &[_]u8{ '-', b.char };
                     @compileError("Invalid quantifier sequence:" ++ fmt);
                 }
+
                 // only a?a? is valid - check for just a?a sequences
-                if (j+1 >= sq.len or tag(sq[j+1]) != .q or tag(sq[j+1].q) != .optional) {
+                if (j + 1 >= sq.len or tag(sq[j + 1]) != .q or tag(sq[j + 1].q) != .optional) {
                     const fmt: []const u8 = &[_]u8{ ' ', a.char, '-' } ++ @tagName(tag(q)) ++ &[_]u8{ '-', b.char };
                     @compileError("Invalid optional ordering:" ++ fmt);
                 }
@@ -1715,17 +1713,15 @@ fn analyzeRegexTokens(
 }
 
 fn fuseQuantifiers(
-    comptime es: []const RegexEscaped, 
-) []const SQ {
-
+    comptime es: []const RegexEscaped,
+) []const RegexSymbol {
     comptime {
-
         if (isRegexQuantifier(es[0])) {
             @compileError("fuseQuantifiers: 0th symbol cannot be a quanitifier");
         }
 
         // the symbol stack to return
-        var sq: [es.len]SQ = undefined;
+        var sq: [es.len]RegexSymbol = undefined;
 
         // check if we are within a [] clause
         var in_square: bool = false;
@@ -1759,27 +1755,26 @@ fn fuseQuantifiers(
                 negated = true;
                 continue;
             }
-        
-            if (!isRegexQuantifier(es[j]) or in_square) {
 
+            if (!isRegexQuantifier(es[j]) or in_square) {
                 last_quantifier = false;
 
                 // every bracket within an [] clause is escaped
-                const override_bracket: bool = in_square and switch(es[j].char) {
-                    '(', ')', '[', ']', '{', '}' => (j != square_head and j != square_tail), else => false,
+                const override_bracket: bool = in_square and switch (es[j].char) {
+                    '(', ')', '[', ']', '{', '}' => (j != square_head and j != square_tail),
+                    else => false,
                 };
 
-
-                sq[i] = .{ .s = .{ 
-                    // we don't want square brackets to be within themselves...
-                    .in_square = in_square and j != square_head and j != square_tail,
-                    .escaped = es[j].escaped or override_bracket,
-                    .negated = negated and in_square,
-                    .char = es[j].char,
-                }};
-
+                sq[i] = .{
+                    .s = .{
+                        // we don't want square brackets to be within themselves...
+                        .in_square = in_square and j != square_head and j != square_tail,
+                        .escaped = es[j].escaped or override_bracket,
+                        .negated = negated and in_square,
+                        .char = es[j].char,
+                    },
+                };
             } else {
-
                 if (last_quantifier) {
                     @compileError("fuseQuantifiers: invalid quantifier");
                 }
@@ -1806,14 +1801,15 @@ fn fuseQuantifiers(
                         var comma = j;
 
                         scan: while (range_j < es.len) : (range_j += 1) {
-
                             switch (es[range_j].char) {
-                                '}' => break: scan,
-                                ',' => { comma = range_j; continue; },
+                                '}' => break :scan,
+                                ',' => {
+                                    comma = range_j;
+                                    continue;
+                                },
                                 '0'...'9' => continue,
                                 else => @compileError("fuseQuantifiers: invalid char in range"),
                             }
-
                         } else {
                             @compileError("fuseQuantifiers: unmatched '}' char");
                         }
@@ -1825,14 +1821,13 @@ fn fuseQuantifiers(
                         // {i,j}
                         if (range_i < comma) {
                             const start: usize = parseQuantity(es[range_i..comma]);
-                            const stop: usize = parseQuantity(es[comma+1..range_j]);
+                            const stop: usize = parseQuantity(es[comma + 1 .. range_j]);
 
                             if (start >= stop) {
                                 @compileError("fuseQuantifiers: invalid range");
                             }
 
-                            sq[i] = .{ .q = .{ .between = .{ .start = start, .stop = stop }} };
-                            
+                            sq[i] = .{ .q = .{ .between = .{ .start = start, .stop = stop } } };
                         } else {
                             const count: usize = parseQuantity(es[range_i..range_j]);
 
@@ -1840,12 +1835,12 @@ fn fuseQuantifiers(
                                 @compileError("fuseQuantifiers: exact quantifier cannot be 0");
                             }
 
-                            sq[i] = .{ .q = .{ .exact = count } };                        
+                            sq[i] = .{ .q = .{ .exact = count } };
                         }
 
                         j = range_j;
                     },
-                    else => {}
+                    else => {},
                 }
             }
 
@@ -1853,7 +1848,7 @@ fn fuseQuantifiers(
             // certain charactes can be skipped.
             i += 1;
         }
-        
+
         const _sq = sq;
 
         return analyzeRegexTokens(_sq[0..i]);
@@ -1861,7 +1856,7 @@ fn fuseQuantifiers(
 }
 
 fn closingBracket(
-    comptime sq: []const SQ,
+    comptime sq: []const RegexSymbol,
     comptime braces: []const u8,
     comptime idx: usize,
 ) usize {
@@ -1904,7 +1899,7 @@ fn closingBracketEscaped(
 }
 
 fn pipeSearch(
-    comptime sq: []const SQ,
+    comptime sq: []const RegexSymbol,
     comptime idx: usize,
 ) usize {
     comptime var i: usize = idx;
@@ -1959,7 +1954,7 @@ fn RegexAND(
 
 fn RegexNAND(
     // only used for [^abc] type clauses,
-    // should only appear in that context 
+    // should only appear in that context
     comptime this: type,
     comptime next: type,
 ) type {
@@ -1979,14 +1974,11 @@ fn RegexUnit(
     comptime callable: anytype,
     comptime quantifier: ?RegexQuantifier,
 ) type {
-
     return if (@typeInfo(@TypeOf(callable)) == .Fn) struct {
         pub fn call(str: []const u8, i: usize) ?usize {
-
             if (comptime quantifier) |q| {
-
                 var idx: usize = i;
-                
+
                 switch (comptime q) {
                     .exact => |n| {
                         for (0..n) |_| {
@@ -1997,11 +1989,14 @@ fn RegexUnit(
                             }
                         }
                     },
-                    .between => |b| { 
+                    .between => |b| {
                         var count: usize = 0;
-                        while (idx < str.len and count < b.stop) : ({ count += 1; idx += 1; }) {
+                        while (idx < str.len and count < b.stop) : ({
+                            count += 1;
+                            idx += 1;
+                        }) {
                             if (!callable(str[idx])) break;
-                        } 
+                        }
                         if (count < b.start)
                             return null;
                     },
@@ -2010,15 +2005,18 @@ fn RegexUnit(
                     },
                     .one_or_more => {
                         var count: usize = 0;
-                        while (idx < str.len) : ({ count += 1; idx += 1; }) {
+                        while (idx < str.len) : ({
+                            count += 1;
+                            idx += 1;
+                        }) {
                             if (!callable(str[idx])) break;
-                        } 
+                        }
                         if (count < 1)
                             return null;
                     },
                     .optional => { // can be empty
                         if (idx < str.len and callable(str[idx])) idx += 1;
-                    }
+                    },
                 }
                 return idx;
             } else {
@@ -2027,11 +2025,9 @@ fn RegexUnit(
         }
     } else struct {
         pub fn call(str: []const u8, i: usize) ?usize {
-
             if (comptime quantifier) |q| {
-
                 var idx: usize = i;
-                
+
                 switch (comptime q) {
                     .exact => |n| {
                         for (0..n) |_| {
@@ -2042,41 +2038,41 @@ fn RegexUnit(
                             }
                         }
                     },
-                    .between => |b| { 
+                    .between => |b| {
                         var count: usize = 0;
                         while (idx < str.len and count < b.stop) : (count += 1) {
                             idx += callable.call(str[idx..], 0) orelse break;
-                        } 
+                        }
                         if (count < b.start)
                             return null;
                     },
                     .any => {
-                        while (idx < str.len) 
+                        while (idx < str.len)
                             idx += callable.call(str[idx..], 0) orelse break;
                     },
                     .one_or_more => {
                         var count: usize = 0;
                         while (idx < str.len) : (count += 1) {
                             idx += callable.call(str[idx..], 0) orelse break;
-                        } 
+                        }
                         if (count < 1)
                             return null;
                     },
                     .optional => { // can be empty
-                        if (idx < str.len)                            
+                        if (idx < str.len)
                             idx += callable.call(str[idx..], 0) orelse @as(usize, 0);
-                    }
+                    },
                 }
                 return idx;
             } else {
                 return callable.call(str, i);
             }
-        }   
+        }
     };
 }
 
 fn ParseRegexTreeBreadth(
-    comptime sq: []const SQ,
+    comptime sq: []const RegexSymbol,
     comptime enclosing: u8,
 ) type {
     comptime {
@@ -2088,7 +2084,7 @@ fn ParseRegexTreeBreadth(
         if (pipe < sq.len) {
             return RegexOR(
                 ParseRegexTreeBreadth(sq[0..pipe], enclosing),
-                ParseRegexTreeBreadth(sq[pipe+1..], enclosing),
+                ParseRegexTreeBreadth(sq[pipe + 1 ..], enclosing),
             );
         } else {
             return ParseRegexTreeDepth(sq, enclosing);
@@ -2106,14 +2102,22 @@ fn InvertRegex(
     if (a ^ b == 1) {
         return function;
     } else { // negate the result
-        return struct { pub fn call(c: u8) bool { return !@call(.always_inline, function, .{c}); }}.call;
+        return struct {
+            pub fn call(c: u8) bool {
+                return !@call(.always_inline, function, .{c});
+            }
+        }.call;
     }
 }
 
 fn EqualRegex(
     comptime char: u8,
 ) fn (u8) bool {
-    return struct { pub fn call(c: u8) bool { return c == char; } }.call;
+    return struct {
+        pub fn call(c: u8) bool {
+            return c == char;
+        }
+    }.call;
 }
 
 fn SpanRegex(
@@ -2121,21 +2125,24 @@ fn SpanRegex(
     comptime b: u8,
 ) fn (u8) bool {
     if (comptime a >= b)
-        @compileError("Invalid character span: " ++ &[_]u8{ a, '-', 'b' });
+        @compileError("Invalid character span: " ++ &[_]u8{ a, '-', b });
 
-    return struct { pub fn call(c: u8) bool { return a <= c and c <= b; } }.call;
+    return struct {
+        pub fn call(c: u8) bool {
+            return a <= c and c <= b;
+        }
+    }.call;
 }
 
-fn anyRegex(_: u8) bool { 
-    return true; 
+fn anyRegex(_: u8) bool {
+    return true;
 }
 
 fn ParseRegexTreeDepth(
-    comptime sq: []const SQ,
+    comptime sq: []const RegexSymbol,
     comptime enclosing: u8,
 ) type {
     comptime {
-
         const tag = std.meta.activeTag;
 
         if (sq.len == 0)
@@ -2150,26 +2157,25 @@ fn ParseRegexTreeDepth(
         // deduce function
         const Node: type = switch (_sq[0]) {
             .s => |s| outer: {
-
                 if (isRegexBracket(s)) {
                     // this branch deduces an entire sub-automaton
                     var closing = closingBracket(sq, bracketSet(s), 0);
                     // parse everything between the brackets
                     const T: type = ParseRegexTreeBreadth(sq[1..closing], s.char);
                     // the entire automaton can be quantified
-                    const q: ?RegexQuantifier = 
-                        if (closing + 1 >= _sq.len) null else switch(_sq[closing + 1]) {
-                            .q => |q| inner: {
-                                closing += 1;
-                                break :inner q;
-                            },
-                            .s => null,
-                        };
+                    const q: ?RegexQuantifier =
+                        if (closing + 1 >= _sq.len) null else switch (_sq[closing + 1]) {
+                        .q => |q| inner: {
+                            closing += 1;
+                            break :inner q;
+                        },
+                        .s => null,
+                    };
                     // closing is a bracket or quantifier
                     if (closing + 1 >= _sq.len) {
                         _sq = _sq[0..0]; // exhaust
                     } else {
-                        _sq = _sq[closing + 1..];
+                        _sq = _sq[closing + 1 ..];
                     }
                     // don't wrap with quantifier if unnecessary
                     break :outer if (q) |_q| RegexUnit(T, _q) else T;
@@ -2178,7 +2184,7 @@ fn ParseRegexTreeDepth(
                 use_nand = s.negated;
 
                 // implements [a-z] character spans...
-                if (_sq.len >= 3 and tag(_sq[1]) == .s and tag(_sq[2]) == .s) {
+                if (_sq.len >= 3 and s.in_square and tag(_sq[1]) == .s and tag(_sq[2]) == .s) {
                     const t = _sq[1].s;
                     const u = _sq[2].s;
                     if (t.char == '-' and !t.escaped and u.in_square) {
@@ -2189,14 +2195,14 @@ fn ParseRegexTreeDepth(
 
                 _sq = _sq[1..]; // pop token
 
-                const q: ?RegexQuantifier = 
-                    if (0 == _sq.len) null else switch(_sq[0]) {
-                        .q => |q| inner: {
-                            defer _sq = _sq[1..]; // pop token
-                            break :inner q;
-                        },
-                        .s => null,
-                    };
+                const q: ?RegexQuantifier =
+                    if (0 == _sq.len) null else switch (_sq[0]) {
+                    .q => |q| inner: {
+                        _sq = _sq[1..]; // pop token
+                        break :inner q;
+                    },
+                    .s => null,
+                };
 
                 if (s.escaped) {
                     switch (s.char) {
@@ -2216,17 +2222,17 @@ fn ParseRegexTreeDepth(
                 }
 
                 // default to direct equals
-                break: outer RegexUnit(InvertRegex(true, s.negated, EqualRegex(s.char)), q);
+                break :outer RegexUnit(InvertRegex(true, s.negated, EqualRegex(s.char)), q);
             },
-            .q => @compileError("ParseRegexTreeRecursive: leading quantifier")            
+            .q => @compileError("ParseRegexTreeRecursive: leading quantifier"),
         };
 
         if (use_nand) {
             return RegexNAND(Node, ParseRegexTreeDepth(_sq, enclosing));
         } else if (enclosing == '(') {
-            return RegexAND(Node, ParseRegexTreeDepth(_sq, enclosing));        
+            return RegexAND(Node, ParseRegexTreeDepth(_sq, enclosing));
         } else {
-            return RegexOR(Node, ParseRegexTreeDepth(_sq, enclosing));        
+            return RegexOR(Node, ParseRegexTreeDepth(_sq, enclosing));
         }
     }
 }
@@ -3802,9 +3808,7 @@ test "iterator                                 : window" {
     }
 }
 
-
 test "regex:                                    : match iterator" {
-
     { // match special characters (typical) - one or more
         var itr = match("\\d+", "123a456");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "123");
