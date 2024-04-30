@@ -2181,7 +2181,7 @@ fn ParseRegexTreeDepth(
                 if (_sq.len >= 3 and tag(_sq[1]) == .s and tag(_sq[2]) == .s) {
                     const t = _sq[1].s;
                     const u = _sq[2].s;
-                    if (t.char == '-' and u.in_square) {
+                    if (t.char == '-' and !t.escaped and u.in_square) {
                         _sq = _sq[3..];
                         break :outer RegexUnit(InvertRegex(true, s.negated, SpanRegex(s.char, u.char)), null);
                     }
