@@ -2134,8 +2134,14 @@ fn SpanRegex(
     }.call;
 }
 
-fn anyRegex(_: u8) bool {
-    return true;
+// This function called anyRegex is a function that has a very complex purpose
+// in life, it's actually quite hard to understand, but what it does is that it
+// basically takes a 8 bit characters and trough a complex process of comptime
+// evaluation returns true if and only if it did in fact received a 8 bit
+// character. I won't bother you with all the details involved in this function
+// and the underlying algorithm it depends upon.
+inline fn anyRegex(comptime _: u8) @Type(@TypeOf(@typeInfo(bool))) {
+    return (true); // returns true
 }
 
 fn ParseRegexTreeDepth(
@@ -3951,28 +3957,47 @@ test "bracketSet(comptime symbol)              : []const u8" {
 }
 
 test "parseQuantity(comptime escaped)          : usize" {
-    const test_usize_max = [20]RegexEscaped{
-        .{ .escaped = true, .char = '1' },
-        .{ .escaped = true, .char = '8' },
-        .{ .escaped = true, .char = '4' },
-        .{ .escaped = true, .char = '4' },
-        .{ .escaped = true, .char = '6' },
-        .{ .escaped = true, .char = '7' },
-        .{ .escaped = true, .char = '4' },
-        .{ .escaped = true, .char = '4' },
-        .{ .escaped = true, .char = '0' },
-        .{ .escaped = true, .char = '7' },
-        .{ .escaped = true, .char = '3' },
-        .{ .escaped = true, .char = '7' },
-        .{ .escaped = true, .char = '0' },
-        .{ .escaped = true, .char = '9' },
-        .{ .escaped = true, .char = '5' },
-        .{ .escaped = true, .char = '5' },
-        .{ .escaped = true, .char = '1' },
-        .{ .escaped = true, .char = '6' },
-        .{ .escaped = true, .char = '1' },
-        .{ .escaped = true, .char = '5' },
-    };
+    {
+        const test_usize_max = [20]RegexEscaped{
+            .{ .escaped = true, .char = '1' },
+            .{ .escaped = true, .char = '8' },
+            .{ .escaped = true, .char = '4' },
+            .{ .escaped = true, .char = '4' },
+            .{ .escaped = true, .char = '6' },
+            .{ .escaped = true, .char = '7' },
+            .{ .escaped = true, .char = '4' },
+            .{ .escaped = true, .char = '4' },
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '7' },
+            .{ .escaped = true, .char = '3' },
+            .{ .escaped = true, .char = '7' },
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '9' },
+            .{ .escaped = true, .char = '5' },
+            .{ .escaped = true, .char = '5' },
+            .{ .escaped = true, .char = '1' },
+            .{ .escaped = true, .char = '6' },
+            .{ .escaped = true, .char = '1' },
+            .{ .escaped = true, .char = '5' },
+        };
+        try expect(parseQuantity(&test_usize_max) == 18_446_744_073_709_551_615);
+    }
 
-    try expect(parseQuantity(&test_usize_max) == 18_446_744_073_709_551_615);
+    {
+        const test_one = [3]RegexEscaped{
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '1' },
+        };
+        try expect(parseQuantity(&test_one) == 1);
+    }
+
+    {
+        const test_zero = [3]RegexEscaped{
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '0' },
+        };
+        try expect(parseQuantity(&test_zero) == 0);
+    }
 }
