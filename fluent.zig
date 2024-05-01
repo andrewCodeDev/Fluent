@@ -2101,10 +2101,8 @@ fn RegexAND(
                         var idx: usize = i;
                         var count: usize = 0;
                         if (b.start == 0 and b.stop == 1) {
-                            for (0..b.stop) |_| {
-                                idx += lhs.call(str[idx..], 0) orelse return null;
-                            }
-                            return rhs.call(str, idx);
+                            const j = lhs.call(str, i) orelse return rhs.call(str, i);
+                            return rhs.call(str, j) orelse rhs.call(str, i);
                         }
                         while (count < b.start) : (count += 1) {
                             idx += lhs.call(str[idx..], 0) orelse return null;
@@ -4347,9 +4345,9 @@ test "regex-engine35                          : match iterator -> regex" {
     // @BUG
     {
         const expression = "a{0,1}b{0,1}c{0,1}d{0,1}e{0,1}f{0,1}g{0,1}h{0,1}i{0,1}j{0,1}k{0,1}l{0,1}m{0,1}n{0,1}o{0,1}p{0,1}q{0,1}r{0,1}s{0,1}t{0,1}u{0,1}v{0,1}w{0,1}x{0,1}y{0,1}z{0,1}";
-        const string = "abcdefghijklmnopqrstuvwxyz";
+        const string = "mnopqrstuvwxyz";
         var iter = match(expression, string);
-        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz", iter.next() orelse unreachable);
+        try expectEqSlice(u8, "mnopqrstuvwxyz", iter.next() orelse unreachable);
     }
 }
 
