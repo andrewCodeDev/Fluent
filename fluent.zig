@@ -4022,13 +4022,72 @@ test "parseQuantity(comptime escaped)          : usize" {
 }
 
 test "regex-engine                             : match iterator -> digits" {
+    const expected = "0123456789";
     {
         const expression = "\\d+";
         const string = "0123456789";
         var iter = match(expression, string);
         const result = iter.next() orelse unreachable;
 
-        try expect(std.mem.eql(u8, result, string));
+        try expect(std.mem.eql(u8, result, expected));
     }
-    // I'm going to add more test I just have to go to lunch
+
+    {
+        const expression = "\\d+";
+        const string = "aa0123456789aa";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+
+        try expect(std.mem.eql(u8, result, expected));
+    }
+
+    {
+        const expression = "\\d+";
+        const string = "\\dDmW0123456789aa\\1:";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+
+        try expect(std.mem.eql(u8, result, expected));
+    }
+
+    {
+        const expression = "\\d*";
+        const string = "\\dDmW0123456789aa\\1:";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expect(std.mem.eql(u8, result, ""));
+    }
+
+    // BUG
+    // {
+    //     const expression = "\\d?";
+    //     const string = "abc0123456789abc";
+    //     var iter = match(expression, string);
+    //     const result = iter.next() orelse unreachable;
+    //     try expect(std.mem.eql(u8, result, "0"));
+    // }
+
+    {
+        const expression = "\\d{10}";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expect(std.mem.eql(u8, result, "0123456789"));
+    }
+
+    {
+        const expression = "\\d{00000000000000000000000000000000000000010}";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expect(std.mem.eql(u8, result, "0123456789"));
+    }
+
+    {
+        const expression = "\\d{11}";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next();
+        try expect(result == null);
+    }
 }
