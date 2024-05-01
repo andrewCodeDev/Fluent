@@ -3991,7 +3991,7 @@ test "parseQuantity(comptime escaped)          : usize" {
     }
 }
 
-test "regex-engine1                            : match iterator -> digits" {
+test "regex-engine1                            : match iterator -> regex" {
     {
         const expression = "\\d+";
         const string = "0123456789";
@@ -4001,7 +4001,7 @@ test "regex-engine1                            : match iterator -> digits" {
     }
 }
 
-test "regex-engine2                            : match iterator -> digits" {
+test "regex-engine2                            : match iterator -> regex" {
     {
         const expression = "\\d+";
         const string = "0123456789";
@@ -4011,7 +4011,7 @@ test "regex-engine2                            : match iterator -> digits" {
     }
 }
 
-test "regex-engine3                            : match iterator -> digits" {
+test "regex-engine3                            : match iterator -> regex" {
     {
         const expression = "\\d+";
         const string = "aa0123456789aa";
@@ -4021,7 +4021,7 @@ test "regex-engine3                            : match iterator -> digits" {
     }
 }
 
-test "regex-engine4                            : match iterator -> digits" {
+test "regex-engine4                            : match iterator -> regex" {
     {
         const expression = "\\d+";
         const string = "\\dDmW0123456789aa\\1:";
@@ -4031,7 +4031,7 @@ test "regex-engine4                            : match iterator -> digits" {
     }
 }
 
-test "regex-engine5                            : match iterator -> digits" {
+test "regex-engine5                            : match iterator -> regex" {
     // @SOLVED
     {
         const expression = "\\d*";
@@ -4042,7 +4042,7 @@ test "regex-engine5                            : match iterator -> digits" {
     }
 }
 
-test "regex-engine6                            : match iterator -> digits" {
+test "regex-engine6                            : match iterator -> regex" {
     // @SOLVED
     {
         const expression = "\\d?";
@@ -4053,7 +4053,7 @@ test "regex-engine6                            : match iterator -> digits" {
     }
 }
 
-test "regex-engine7                            : match iterator -> digits" {
+test "regex-engine7                            : match iterator -> regex" {
     {
         const expression = "\\d{10}";
         const string = "abc0123456789abc";
@@ -4063,7 +4063,7 @@ test "regex-engine7                            : match iterator -> digits" {
     }
 }
 
-test "regex-engine8                            : match iterator -> digits" {
+test "regex-engine8                            : match iterator -> regex" {
     {
         const expression = "\\d{00000000000000000000000000000000000000010}";
         const string = "abc0123456789abc";
@@ -4072,7 +4072,7 @@ test "regex-engine8                            : match iterator -> digits" {
         try expectEqSlice(u8, "0123456789", result);
     }
 }
-test "regex-engine9                            : match iterator -> digits" {
+test "regex-engine9                            : match iterator -> regex" {
     {
         const expression = "\\d{11}";
         const string = "abc0123456789abc";
@@ -4082,7 +4082,7 @@ test "regex-engine9                            : match iterator -> digits" {
     }
 }
 
-test "regex-engine10                           : match iterator -> digits" {
+test "regex-engine10                           : match iterator -> regex" {
     // @SOLVED
     {
         const expression = "\\d{0,10}";
@@ -4093,7 +4093,7 @@ test "regex-engine10                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine11                           : match iterator -> digits" {
+test "regex-engine11                           : match iterator -> regex" {
     {
         const expression = "\\D\\D\\D\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\D\\D\\D";
         const string = "abc0123456789abc";
@@ -4103,7 +4103,7 @@ test "regex-engine11                           : match iterator -> digits" {
     }
 }
 
-// test "regex-engine12                           : match iterator -> digits" {
+// test "regex-engine12                           : match iterator -> regex" {
 //     // @BUG
 //     {
 //         const expression = "\\D\\D\\D\\d{0,10}\\D\\D\\D";
@@ -4114,7 +4114,7 @@ test "regex-engine11                           : match iterator -> digits" {
 //     }
 // }
 
-test "regex-engine13                           : match iterator -> digits" {
+test "regex-engine13                           : match iterator -> regex" {
     {
         const expression = "\\D|\\d";
         const string = "abc0123456789abc";
@@ -4126,7 +4126,7 @@ test "regex-engine13                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine14                           : match iterator -> digits" {
+test "regex-engine14                           : match iterator -> regex" {
     // @SOLVED
     {
         const expression = "\\D?|\\d?";
@@ -4139,7 +4139,7 @@ test "regex-engine14                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine15                           : match iterator -> digits" {
+test "regex-engine15                           : match iterator -> regex" {
     // @SOLVED
     {
         const expression = "[abc]{3}|[0-9]{10}";
@@ -4151,7 +4151,7 @@ test "regex-engine15                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine16                           : match iterator -> digits" {
+test "regex-engine16                           : match iterator -> regex" {
     {
         const expression = "\\D[abc]+|\\d[0-9]+";
         const string = "abc0123456789abc";
@@ -4162,7 +4162,7 @@ test "regex-engine16                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine17                           : match iterator -> digits" {
+test "regex-engine17                           : match iterator -> regex" {
     {
         const expression = "[abc]?|[0-9]{10}";
         const string = "abc0123456789abc";
@@ -4177,7 +4177,7 @@ test "regex-engine17                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine18                           : match iterator -> digits" {
+test "regex-engine18                           : match iterator -> regex" {
     {
         const expression = "\\d{3}([A-Za-z]+)\\d{3}";
         const string = "123Fluent123";
@@ -4186,7 +4186,7 @@ test "regex-engine18                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine19                           : match iterator -> digits" {
+test "regex-engine19                           : match iterator -> regex" {
     {
         const expression = "(\\d{3}([A-Za-z]+))?|\\d{3}";
         const string = "123Fluent123";
@@ -4196,7 +4196,7 @@ test "regex-engine19                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine20                           : match iterator -> digits" {
+test "regex-engine20                           : match iterator -> regex" {
     {
         const expression = "(([a-z][0-9])|([a-z][0-9]))+";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4205,7 +4205,7 @@ test "regex-engine20                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine21                           : match iterator -> digits" {
+test "regex-engine21                           : match iterator -> regex" {
     {
         const expression = "(([a-z][0-9])|([a-z][0-9])?)+";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4214,7 +4214,7 @@ test "regex-engine21                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine22                           : match iterator -> digits" {
+test "regex-engine22                           : match iterator -> regex" {
     {
         const expression = "(([a-z]?[0-9]?)?|([a-z]?[0-9]?)?)+";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4223,7 +4223,7 @@ test "regex-engine22                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine23                           : match iterator -> digits" {
+test "regex-engine23                           : match iterator -> regex" {
     {
         const expression = "(([a-z]?[0-9]?)?|([a-z]?[0-9]?)?)+";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4232,7 +4232,7 @@ test "regex-engine23                           : match iterator -> digits" {
     }
 }
 
-test "regex-engine24                          : match iterator -> digits" {
+test "regex-engine24                          : match iterator -> regex" {
     {
         const expression = "^(([a-z][0-9])|([a-z][0-9]))";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4241,12 +4241,87 @@ test "regex-engine24                          : match iterator -> digits" {
     }
 }
 
-test "regex-engine25                          : match iterator -> digits" {
+test "regex-engine25                          : match iterator -> regex" {
     {
         const expression = "[^0-9]+";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         var iter = match(expression, string);
         try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz", iter.next() orelse unreachable);
         try expectEqSlice(u8, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", iter.next() orelse unreachable);
+    }
+}
+
+test "regex-engine26                          : match iterator -> regex" {
+    {
+        const expression = "[^0-8]+";
+        const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var iter = match(expression, string);
+        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz", iter.next() orelse unreachable);
+        try expectEqSlice(u8, "9ABCDEFGHIJKLMNOPQRSTUVWXYZ", iter.next() orelse unreachable);
+    }
+}
+
+test "regex-engine27                          : match iterator -> regex" {
+    {
+        const expression = "[^1-9]+";
+        const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var iter = match(expression, string);
+        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz0", iter.next() orelse unreachable);
+        try expectEqSlice(u8, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", iter.next() orelse unreachable);
+    }
+}
+
+test "regex-engine28                          : match iterator -> regex" {
+    {
+        const expression = "([^a-z]+[^A-Z]+)";
+        const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var iter = match(expression, string);
+        try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
+    }
+}
+
+test "regex-engine29                          : match iterator -> regex" {
+    {
+        const expression = "([^a-z^A-Z]+)";
+        const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var iter = match(expression, string);
+        try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
+    }
+}
+
+test "regex-engine30                          : match iterator -> regex" {
+    {
+        const expression = "([^a-z^^^^A-Z]+)";
+        const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var iter = match(expression, string);
+        try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
+    }
+}
+
+test "regex-engine31                          : match iterator -> regex" {
+    {
+        const expression = "([^a-z^A-Z]+)";
+        const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var iter = match(expression, string);
+        try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
+    }
+}
+
+test "regex-engine32                          : match iterator -> regex" {
+    {
+        const expression = "a?b?c?d?e?f?g?h?i?j?k?l?m?n?o?p?q?r?s?t?u?v?w?x?y?z?0?1?2?3?4?5?6?7?8?9?A?B?C?D?E?F?G?H?I?J?K?L?M?N?O?P?Q?R?S?T?U?V?W?X?Y?Z?";
+        const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var iter = match(expression, string);
+        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", iter.next() orelse unreachable);
+    }
+}
+
+test "regex-engine34                          : match iterator -> regex" {
+    // @INVESTIGATE
+    {
+        const expression = "a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z+0+1+2+3+4+5+6+7+8+9+A+B+C+D+E+F+G+H+I+J+K+L+M+N+O+P+Q+R+S+T+U+V+W+X+Y+Z+";
+        const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var iter = match(expression, string);
+        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", iter.next() orelse unreachable);
     }
 }
