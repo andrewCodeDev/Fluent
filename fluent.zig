@@ -3907,3 +3907,16 @@ test "isRegexQuantifier(symbol)                : bool" {
         try expect(isRegexQuantifier(rq) == true);
     }
 }
+
+test "isRegexBracket(symbol)                   : bool" {
+    const test_case = [_]u8{ '(', ')', '[', ']' };
+    for (test_case) |case| {
+        const rc: RegexCharacter = .{
+            .char = case,
+            .escaped = false,
+            .negated = undefined,
+            .in_square = undefined,
+        };
+        try expect(isRegexBracket(rc) == true);
+    }
+}
