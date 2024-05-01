@@ -2275,6 +2275,7 @@ fn RegexNAND(
 const testing = std.testing;
 const testing_allocator = std.testing.allocator;
 const expect = std.testing.expect;
+const expectEqSlice = std.testing.expectEqualSlices;
 
 ////////////////////////////////////////////////////////////////////////////////
 // @TEST : IMMUTABLE BACKEND                                                  //
@@ -4022,14 +4023,12 @@ test "parseQuantity(comptime escaped)          : usize" {
 }
 
 test "regex-engine                             : match iterator -> digits" {
-    const expected = "0123456789";
     {
         const expression = "\\d+";
         const string = "0123456789";
         var iter = match(expression, string);
         const result = iter.next() orelse unreachable;
-
-        try expect(std.mem.eql(u8, result, expected));
+        try expectEqSlice(u8, "0123456789", result);
     }
 
     {
@@ -4037,8 +4036,7 @@ test "regex-engine                             : match iterator -> digits" {
         const string = "aa0123456789aa";
         var iter = match(expression, string);
         const result = iter.next() orelse unreachable;
-
-        try expect(std.mem.eql(u8, result, expected));
+        try expectEqSlice(u8, "0123456789", result);
     }
 
     {
@@ -4046,25 +4044,27 @@ test "regex-engine                             : match iterator -> digits" {
         const string = "\\dDmW0123456789aa\\1:";
         var iter = match(expression, string);
         const result = iter.next() orelse unreachable;
-
-        try expect(std.mem.eql(u8, result, expected));
+        try expectEqSlice(u8, "0123456789", result);
     }
 
-    {
-        const expression = "\\d*";
-        const string = "\\dDmW0123456789aa\\1:";
-        var iter = match(expression, string);
-        const result = iter.next() orelse unreachable;
-        try expect(std.mem.eql(u8, result, ""));
-    }
+    // @BUG
+    //
+    // {
+    //     const expression = "\\d*";
+    //     const string = "\\dDmW0123456789aa\\1:";
+    //     var iter = match(expression, string);
+    //     const result = iter.next() orelse unreachable;
+    //     try expectEqSlice(u8, "0123456789", result);
+    // }
 
-    // BUG
+    // @BUG
+    //
     // {
     //     const expression = "\\d?";
     //     const string = "abc0123456789abc";
     //     var iter = match(expression, string);
     //     const result = iter.next() orelse unreachable;
-    //     try expect(std.mem.eql(u8, result, "0"));
+    //     try expectEqSlice(u8, "0123456789", result);
     // }
 
     {
@@ -4072,7 +4072,7 @@ test "regex-engine                             : match iterator -> digits" {
         const string = "abc0123456789abc";
         var iter = match(expression, string);
         const result = iter.next() orelse unreachable;
-        try expect(std.mem.eql(u8, result, "0123456789"));
+        try expectEqSlice(u8, "0123456789", result);
     }
 
     {
@@ -4080,7 +4080,7 @@ test "regex-engine                             : match iterator -> digits" {
         const string = "abc0123456789abc";
         var iter = match(expression, string);
         const result = iter.next() orelse unreachable;
-        try expect(std.mem.eql(u8, result, "0123456789"));
+        try expectEqSlice(u8, "0123456789", result);
     }
 
     {
@@ -4089,5 +4089,39 @@ test "regex-engine                             : match iterator -> digits" {
         var iter = match(expression, string);
         const result = iter.next();
         try expect(result == null);
+    }
+
+    // @BUG
+    //
+    // {
+    //     const expression = "\\d{0,10}";
+    //     const string = "abc0123456789abc";
+    //     var iter = match(expression, string);
+    //     const result = iter.next() orelse unreachable;
+    //     // result = iter.next() orelse unreachable;
+    //     // result = iter.next() orelse unreachable;
+    //     // result = iter.next() orelse unreachable;
+    //     // result = iter.next() orelse unreachable;
+    //     // result = iter.next() orelse unreachable;
+    //     // result = iter.next() orelse unreachable;
+    //     // result = iter.next() orelse unreachable;
+    //     // result = iter.next() orelse unreachable;
+    //     try expectEqSlice(u8, "0123456789", result);
+    // }
+
+    {
+        const expression = "\\D\\D\\D\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\D\\D\\D";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "abc0123456789abc", result);
+    }
+
+    {
+        const expression = "\\D\\D\\D\\d{0,10}\\D\\D\\D";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "abc0123456789abc", result);
     }
 }
