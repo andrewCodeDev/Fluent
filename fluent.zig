@@ -3920,3 +3920,32 @@ test "isRegexBracket(symbol)                   : bool" {
         try expect(isRegexBracket(rc) == true);
     }
 }
+
+test "bracketSet(comptime symbol)              : []const u8" {
+    inline for (32..127) |case| {
+        switch (case) {
+            '(' => {
+                const rc: RegexCharacter = .{
+                    .char = @truncate(case),
+                    .escaped = false,
+                    .negated = undefined,
+                    .in_square = undefined,
+                };
+                const result = bracketSet(rc);
+                try expect(result[0] == '(');
+                try expect(result[1] == ')');
+            },
+            else => {
+                const rc: RegexCharacter = .{
+                    .char = @truncate(case),
+                    .escaped = false,
+                    .negated = undefined,
+                    .in_square = undefined,
+                };
+                const result = bracketSet(rc);
+                try expect(result[0] == '[');
+                try expect(result[1] == ']');
+            },
+        }
+    }
+}
