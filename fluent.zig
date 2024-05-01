@@ -3697,7 +3697,7 @@ test "intersectWith(self, string, buffer)      : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "string integer and float parsing        : ConstSelf" {
+test "string integer and float parsing         : ConstSelf" {
     {
         const result = init("42").digit(usize) orelse unreachable;
         try expect(result == 42);
@@ -3721,7 +3721,7 @@ test "string integer and float parsing        : ConstSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "filter                                  : ConstSelf" {
+test "filter                                   : ConstSelf" {
     const x = init("1ab2cd3hx45");
     var buffer: [32]u8 = undefined;
 
@@ -3737,7 +3737,7 @@ test "filter                                  : ConstSelf" {
 }
 ////////////////////////////////////////////////////////////////////////////////
 
-test "reduce                                  : ConstSelf" {
+test "reduce                                   : ConstSelf" {
     const all_g = struct {
         fn call(a: bool, b: anytype) bool {
             return a and (b == 'g');
@@ -3759,7 +3759,7 @@ test "reduce                                  : ConstSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "mapReduce                                 : ConstSelf" {
+test "mapReduce                                : ConstSelf" {
     const has_g = struct {
         fn call(a: bool, b: anytype) bool {
             return a or (b == 'g');
@@ -3833,7 +3833,7 @@ test "iterator                                 : window" {
     }
 }
 
-test "regex:                                    : match iterator" {
+test "regex:                                   : match iterator" {
     { // match special characters (typical) - one or more
         var itr = match("\\d+", "123a456");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "123");
@@ -4019,4 +4019,16 @@ test "parseQuantity(comptime escaped)          : usize" {
         };
         try expect(parseQuantity(&test_zero) == 0);
     }
+}
+
+test "regex-engine                             : match iterator -> digits" {
+    {
+        const expression = "\\d+";
+        const string = "0123456789";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+
+        try expect(std.mem.eql(u8, result, string));
+    }
+    // I'm going to add more test I just have to go to lunch
 }
