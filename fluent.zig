@@ -3885,3 +3885,14 @@ test "regex:                                    : match iterator" {
         try std.testing.expect(itr.next() == null);
     }
 }
+
+test "isRegexFilter(symbol)                    : bool" {
+    const test_case = [_]u8{ 'w', 'W', 's', 'S', 'd', 'D', '.' };
+    for (test_case) |case| {
+        const rf: RegexEscaped = .{
+            .char = case,
+            .escaped = true,
+        };
+        try expect(isRegexFilter(rf) == true);
+    }
+}
