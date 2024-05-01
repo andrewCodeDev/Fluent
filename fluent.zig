@@ -116,8 +116,7 @@ pub fn match(
     return MatchIterator(expression).init(source);
 }
 
-
-const StringOptions = union{ 
+const StringOptions = union {
     regex: []const u8,
     scalar: u8,
 };
@@ -136,10 +135,10 @@ fn SplitIterator(comptime expression: []const u8) type {
         pub fn next(self: *Self) ?[]const u8 {
             const start = self.index orelse return null;
             var stop: usize = start;
-            const end: ?usize = blk: {  
+            const end: ?usize = blk: {
                 while (stop < self.items.len) : (stop += 1) {
-                    if (tree.call(self.items, stop)) |n| break :blk n else continue;                    
-                } else break: blk null;
+                    if (tree.call(self.items, stop)) |n| break :blk n else continue;
+                } else break :blk null;
             };
             defer self.index = end;
             return self.items[start..stop];
@@ -168,14 +167,14 @@ fn TokenIterator(comptime expression: []const u8) type {
         pub fn next(self: *Self) ?[]const u8 {
             const start = self.index orelse return null;
             var stop: usize = start;
-            const end: ?usize = blk: {  
+            const end: ?usize = blk: {
                 while (stop < self.items.len) : (stop += 1) {
-                    if (tree.call(self.items, stop)) |n| break :blk n else continue;                    
-                } else break: blk null;
+                    if (tree.call(self.items, stop)) |n| break :blk n else continue;
+                } else break :blk null;
             };
             defer self.index = end;
             return self.items[start..stop];
-        }        
+        }
     };
 }
 
@@ -444,9 +443,7 @@ fn IteratorInterface(
 // GeneralBackend //////////////////////////////////
 
 pub fn GeneralImmutableBackend(comptime Self: type) type {
-
     return struct {
-
         pub fn all(self: Self, predicate: fn (Self.DataType) bool) bool {
             return for (self.items) |x| {
                 if (!predicate(x)) break false;
@@ -462,7 +459,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
         pub fn getAt(self: Self, idx: anytype) Self.DataType {
             return self.items[wrapIndex(self.items.len, idx)];
         }
-    
+
         pub fn slice(self: Self, i: anytype, j: anytype) Self {
             const I = @TypeOf(i);
             const J = @TypeOf(j);
@@ -618,7 +615,6 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
 
 fn ImmutableNumericBackend(comptime Self: type) type {
     return struct {
-
         pub usingnamespace GeneralImmutableBackend(Self);
 
         ///////////////////////
@@ -741,7 +737,6 @@ fn ImmutableNumericBackend(comptime Self: type) type {
         ) std.mem.TokenIterator(Self.DataType, mode) {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
         }
-
 
         ///////////////////////
         //  PRIVATE SECTION  //
@@ -893,7 +888,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
 
 pub fn GeneralMutableBackend(comptime Self: type) type {
     return struct {
-        
+
         // includes operations like reduce, find, and iterators
         pub usingnamespace ImmutableNumericBackend(Self);
 
@@ -961,8 +956,6 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
     };
 }
 
-
-
 fn MutableNumericBackend(comptime Self: type) type {
     return struct {
 
@@ -1013,7 +1006,7 @@ fn MutableNumericBackend(comptime Self: type) type {
         }
 
         fn replaceFirst(
-            self: Self, 
+            self: Self,
             comptime mode: FluentMode,
             this: Parameter(Self.DataType, mode),
             with: Parameter(Self.DataType, mode),
@@ -1137,7 +1130,6 @@ const StringMode = enum { regex, scalar };
 
 fn ImmutableStringBackend(comptime Self: type) type {
     return struct {
-
         pub usingnamespace GeneralImmutableBackend(Self);
 
         ///////////////////////
@@ -1204,9 +1196,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
                 .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
                 .regex => blk: {
                     var itr = Fluent.match(needle, self.items[start_index..]);
-                    const items = itr.next() orelse break :blk null;                  
+                    const items = itr.next() orelse break :blk null;
                     break :blk (itr.index - items.len) + start_index;
-                }
+                },
             };
         }
 
@@ -1238,13 +1230,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
-        pub fn split(
-            self: Self,
-            comptime mode: StringMode, 
-            comptime delimiter: Parameter(u8, mode)
-        ) switch (mode) {
+        pub fn split(self: Self, comptime mode: StringMode, comptime delimiter: Parameter(u8, mode)) switch (mode) {
             .scalar => std.mem.SplitIterator(u8, .scalar),
-            .regex => Fluent.SplitIterator(delimiter)
+            .regex => Fluent.SplitIterator(delimiter),
         } {
             return switch (mode) {
                 .scalar => std.mem.SplitIterator(u8, .scalar){ .buffer = self.items, .index = 0, .delimiter = delimiter },
@@ -1252,13 +1240,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
             };
         }
 
-        pub fn tokenize(
-            self: Self,
-            comptime mode: StringMode, 
-            comptime delimiter: Parameter(u8, mode)
-        ) switch (mode) {
+        pub fn tokenize(self: Self, comptime mode: StringMode, comptime delimiter: Parameter(u8, mode)) switch (mode) {
             .scalar => std.mem.SplitIterator(u8, .scalar),
-            .regex => Fluent.MatchIterator(delimiter)
+            .regex => Fluent.MatchIterator(delimiter),
         } {
             return switch (mode) {
                 .scalar => std.mem.TokenIterator(u8, .scalar){ .buffer = self.items, .index = 0, .delimiter = delimiter },
@@ -1756,7 +1740,7 @@ fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
     comptime var count: usize = 0;
     comptime var coefficient: usize = 1;
     comptime var i: usize = escaped.len;
-    while (i > 0) {
+    inline while (i > 0) {
         i -= 1;
 
         if (comptime !std.ascii.isDigit(escaped[i].char)) {
@@ -1765,7 +1749,7 @@ fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
 
         const value = escaped[i].char - '0';
         count += value * coefficient;
-        coefficient *= 10;
+        coefficient *%= 10;
     }
     return count;
 }
@@ -2052,13 +2036,12 @@ fn RegexAND(
 
             if (comptime !@hasDecl(rhs, "call")) {
                 if (comptime lhs.quantifier) |q| {
-
                     switch (q) {
                         .any => {
                             var idx: usize = i;
                             while (true) {
                                 idx += lhs.call(str[idx..], 0) orelse return if (idx == 0) null else idx;
-                            } 
+                            }
                         },
                         .exact => |n| {
                             var idx: usize = i;
@@ -2080,7 +2063,7 @@ fn RegexAND(
                         },
                         .one_or_more => {
                             var idx = lhs.call(str, i) orelse return null;
-                            
+
                             while (true) {
                                 idx += lhs.call(str[idx..], 0) orelse break;
                             }
@@ -2088,7 +2071,7 @@ fn RegexAND(
                         },
                         .optional => {
                             return lhs.call(str, i) orelse if (i == 0) null else i;
-                        },                    
+                        },
                     }
                 } else {
                     return lhs.call(str, i);
@@ -2103,7 +2086,7 @@ fn RegexAND(
                         while (true) {
                             last = rhs.call(str, idx) orelse last;
                             idx += lhs.call(str[idx..], 0) orelse break;
-                        } 
+                        }
                         return rhs.call(str, idx) orelse last;
                     },
                     .exact => |n| {
@@ -2128,7 +2111,7 @@ fn RegexAND(
                     },
                     .one_or_more => {
                         var idx: usize = lhs.call(str, i) orelse return null;
-                        
+
                         var last: ?usize = null;
                         while (true) {
                             last = rhs.call(str, idx) orelse last;
@@ -2140,7 +2123,7 @@ fn RegexAND(
                         const j = lhs.call(str, i) orelse return rhs.call(str, i);
 
                         return rhs.call(str, j) orelse rhs.call(str, i);
-                    },                    
+                    },
                 }
             } else {
                 const j = lhs.call(str, i) orelse return null;
@@ -2171,12 +2154,12 @@ fn RegexNAND(
 fn RegexUnit(
     comptime Callable: anytype,
     comptime Quantifier: ?RegexQuantifier,
-) type {    
+) type {
     return struct {
         pub const callable = Callable;
         pub const quantifier = Quantifier;
         pub inline fn call(str: []const u8, i: usize) ?usize {
-            if (comptime @typeInfo(@TypeOf(Callable)) == .Fn) {                
+            if (comptime @typeInfo(@TypeOf(Callable)) == .Fn) {
                 return if (i < str.len and callable(str[i])) i + 1 else null;
             } else {
                 return callable.call(str, i);
@@ -2258,19 +2241,17 @@ fn isWordCharacter(c: u8) bool {
 
 fn isVerticalWhitespace(c: u8) bool {
     return switch (c) {
-        '\n', '\x85',
-        std.ascii.control_code.cr, 
-        std.ascii.control_code.vt, 
-        std.ascii.control_code.ff => true, else => false,
+        '\n', '\x85', std.ascii.control_code.cr, std.ascii.control_code.vt, std.ascii.control_code.ff => true,
+        else => false,
     };
 }
 
 fn isHorizontalWhitespace(c: u8) bool {
     return switch (c) {
-        ' ', '\t' => true, else => false,
+        ' ', '\t' => true,
+        else => false,
     };
 }
-
 
 fn ParseRegexTreeDepth(
     comptime sq: []const RegexSymbol,
@@ -2384,6 +2365,7 @@ fn ParseRegexTree(
 const testing = std.testing;
 const testing_allocator = std.testing.allocator;
 const expect = std.testing.expect;
+const expectEqSlice = std.testing.expectEqualSlices;
 
 ////////////////////////////////////////////////////////////////////////////////
 // @TEST : IMMUTABLE BACKEND                                                  //
@@ -2417,7 +2399,7 @@ test "findFrom(self, mode, start_index, needle) : regex\n" {
     {
         const result = self.findFrom(.regex, 9, "test") orelse unreachable;
 
-        std.debug.print("\nRESULT: {}\n\n", .{ result });
+        // std.debug.print("\nRESULT: {}\n\n", .{result});
         try std.testing.expectEqual(10, result);
     }
     {
@@ -2563,7 +2545,6 @@ test "contains(self, mode, needle)             : sequence\n" {
         try expect(result == true);
     }
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -3189,7 +3170,6 @@ test "isAlnum(self)                            : bool" {
         try expect(result == false);
     }
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // @TEST : MUTABLE BACKEND                                                    //
@@ -3898,5 +3878,274 @@ test "regex:                                    : match iterator" {
         var itr = Fluent.match("\".*\"", "xxx\"Hello, World!\"xxx");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "\"Hello, World!\"");
         try std.testing.expect(itr.next() == null);
+    }
+}
+
+test "isRegexFilter(symbol)                    : bool" {
+    const test_case = [_]u8{ 'w', 'W', 's', 'S', 'd', 'D', '.' };
+    for (test_case) |case| {
+        const rf: RegexEscaped = .{
+            .char = case,
+            .escaped = true,
+        };
+        try expect(isRegexFilter(rf) == true);
+    }
+}
+
+test "isRegexQuantifier(symbol)                : bool" {
+    const test_case = [_]u8{ '+', '?', '*', '{' };
+    for (test_case) |case| {
+        const rq: RegexEscaped = .{
+            .char = case,
+            .escaped = false,
+        };
+        try expect(isRegexQuantifier(rq) == true);
+    }
+}
+
+test "isRegexBracket(symbol)                   : bool" {
+    const test_case = [_]u8{ '(', ')', '[', ']' };
+    for (test_case) |case| {
+        const rc: RegexCharacter = .{
+            .char = case,
+            .escaped = false,
+            .negated = undefined,
+            .in_square = undefined,
+        };
+        try expect(isRegexBracket(rc) == true);
+    }
+}
+
+test "bracketSet(comptime symbol)              : []const u8" {
+    inline for (32..127) |case| {
+        switch (case) {
+            '(' => {
+                const rc: RegexCharacter = .{
+                    .char = @truncate(case),
+                    .escaped = false,
+                    .negated = undefined,
+                    .in_square = undefined,
+                };
+                const result = bracketSet(rc);
+                try expect(result[0] == '(');
+                try expect(result[1] == ')');
+            },
+            else => {
+                const rc: RegexCharacter = .{
+                    .char = @truncate(case),
+                    .escaped = false,
+                    .negated = undefined,
+                    .in_square = undefined,
+                };
+                const result = bracketSet(rc);
+                try expect(result[0] == '[');
+                try expect(result[1] == ']');
+            },
+        }
+    }
+}
+
+test "parseQuantity(comptime escaped)          : usize" {
+    {
+        const test_usize_max = [20]RegexEscaped{
+            .{ .escaped = true, .char = '1' },
+            .{ .escaped = true, .char = '8' },
+            .{ .escaped = true, .char = '4' },
+            .{ .escaped = true, .char = '4' },
+            .{ .escaped = true, .char = '6' },
+            .{ .escaped = true, .char = '7' },
+            .{ .escaped = true, .char = '4' },
+            .{ .escaped = true, .char = '4' },
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '7' },
+            .{ .escaped = true, .char = '3' },
+            .{ .escaped = true, .char = '7' },
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '9' },
+            .{ .escaped = true, .char = '5' },
+            .{ .escaped = true, .char = '5' },
+            .{ .escaped = true, .char = '1' },
+            .{ .escaped = true, .char = '6' },
+            .{ .escaped = true, .char = '1' },
+            .{ .escaped = true, .char = '5' },
+        };
+        try expect(parseQuantity(&test_usize_max) == 18_446_744_073_709_551_615);
+    }
+
+    {
+        const test_one = [3]RegexEscaped{
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '1' },
+        };
+        try expect(parseQuantity(&test_one) == 1);
+    }
+
+    {
+        const test_zero = [3]RegexEscaped{
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '0' },
+            .{ .escaped = true, .char = '0' },
+        };
+        try expect(parseQuantity(&test_zero) == 0);
+    }
+}
+
+test "regex-engine1                            : match iterator -> digits" {
+    {
+        const expression = "\\d+";
+        const string = "0123456789";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "0123456789", result);
+    }
+}
+
+test "regex-engine2                            : match iterator -> digits" {
+    {
+        const expression = "\\d+";
+        const string = "0123456789";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "0123456789", result);
+    }
+}
+
+test "regex-engine3                            : match iterator -> digits" {
+    {
+        const expression = "\\d+";
+        const string = "aa0123456789aa";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "0123456789", result);
+    }
+}
+
+test "regex-engine4                            : match iterator -> digits" {
+    {
+        const expression = "\\d+";
+        const string = "\\dDmW0123456789aa\\1:";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "0123456789", result);
+    }
+}
+
+test "regex-engine5                            : match iterator -> digits" {
+    // @SOLVED
+    {
+        const expression = "\\d*";
+        const string = "\\dDmW0123456789aa\\1:";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "0123456789", result);
+    }
+}
+
+test "regex-engine6                            : match iterator -> digits" {
+    // @SOLVED
+    {
+        const expression = "\\d?";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "0", result);
+    }
+}
+
+test "regex-engine7                            : match iterator -> digits" {
+    {
+        const expression = "\\d{10}";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "0123456789", result);
+    }
+}
+
+test "regex-engine8                            : match iterator -> digits" {
+    {
+        const expression = "\\d{00000000000000000000000000000000000000010}";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "0123456789", result);
+    }
+}
+test "regex-engine9                            : match iterator -> digits" {
+    {
+        const expression = "\\d{11}";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next();
+        try expect(result == null);
+    }
+}
+
+test "regex-engine10                           : match iterator -> digits" {
+    // @SOLVED
+    {
+        const expression = "\\d{0,10}";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "0123456789", result);
+    }
+}
+
+test "regex-engine11                           : match iterator -> digits" {
+    {
+        const expression = "\\D\\D\\D\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\D\\D\\D";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "abc0123456789abc", result);
+    }
+}
+
+test "regex-engine12                           : match iterator -> digits" {
+    // @BUG
+    {
+        const expression = "\\D\\D\\D\\d{0,10}\\D\\D\\D";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        const result = iter.next() orelse unreachable;
+        try expectEqSlice(u8, "abc0123456789abc", result);
+    }
+}
+
+test "regex-engine13                           : match iterator -> digits" {
+    {
+        const expression = "\\D|\\d";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        for (string) |ch| {
+            const result = iter.next() orelse unreachable;
+            try expect(result[0] == ch);
+        }
+    }
+}
+
+test "regex-engine14                           : match iterator -> digits" {
+    // @SOLVED
+    {
+        const expression = "\\D?|\\d?";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        for (string) |ch| {
+            const result = iter.next() orelse unreachable;
+            try expect(result[0] == ch);
+        }
+    }
+}
+
+test "regex-engine15                           : match iterator -> digits" {
+    {
+        const expression = "\\D[abc]|\\d[0-9]";
+        const string = "abc0123456789abc";
+        var iter = match(expression, string);
+        try expectEqSlice(u8, "abc", iter.next() orelse unreachable);
+        try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
+        try expectEqSlice(u8, "abc", iter.next() orelse unreachable);
     }
 }
