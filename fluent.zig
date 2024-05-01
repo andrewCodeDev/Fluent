@@ -1663,79 +1663,7 @@ fn fuseEscapes(
         @compileError("fuseEscapes: unused escape symbol");
     }
 
-    // TODO: consider moving below to separate function
-
-    // freeze comptime state
-    const es_ = es;
-
-    return es_[0..idx];
-}
-
-fn analyzeRegexTokens(comptime sq: []const RegexSymbol) []const RegexSymbol {
-    comptime {
-        const tag = std.meta.activeTag;
-
-        var i: usize = 0;
-        var j: usize = 2;
-        while (j < sq.len) : ({
-            i += 1;
-            j += 1;
-        }) {
-            // any quantifier that is followed by an identical character is either invalid or idempotent
-            // a + a  -> invalid
-            // a + a? -> idempotent
-            if (tag(sq[i]) == .s and tag(sq[j]) == .s) {
-                if (tag(sq[i + 1]) != .q)
-                    continue;
-
-                const a = sq[i].s;
-                const b = sq[j].s;
-
-                if (!std.meta.eql(a, b))
-                    continue;
-
-                const q = sq[i + 1].q;
-
-                if (tag(q) != .optional) {
-                    const fmt: []const u8 = &[_]u8{ ' ', a.char, '-' } ++ @tagName(tag(q)) ++ &[_]u8{ '-', b.char };
-                    @compileError("Invalid quantifier sequence:" ++ fmt);
-                }
-
-                // only a?a? is valid - check for just a?a sequences
-                if (j + 1 >= sq.len or tag(sq[j + 1]) != .q or tag(sq[j + 1].q) != .optional) {
-                    const fmt: []const u8 = &[_]u8{ ' ', a.char, '-' } ++ @tagName(tag(q)) ++ &[_]u8{ '-', b.char };
-                    @compileError("Invalid optional ordering:" ++ fmt);
-                }
-            }
-        }
-
-        // backtracking optimizations
-        var _sq: [sq.len]RegexSymbol = sq[0..].*;
-
-        i = 0;
-        while (i < _sq.len) : (i += 1){
-
-            if (tag(_sq[i]) != .s or i + 3 > _sq.len)
-                continue;
-
-            //@compileLog("In loop");
-
-            const s = _sq[i].s;
-
-            // convert .*a -> ~a*a (only if a is not a bracket)
-            if (s.char == '.' and !s.escaped and tag(_sq[i + 1]) == .q and tag(_sq[i + 2]) == .s) {
-                const u = _sq[i + 2].s;
-                if (isRegexBracket(u))
-                    continue;
-
-                //@compileLog(u);
-                _sq[i] = .{ .s = u };
-                _sq[i].s.negated = true;
-            }
-        }
-        const __sq = _sq;
-        return __sq[0..];
-    }
+    return es[0..idx]; // don't reference at runtime
 }
 
 fn fuseQuantifiers(
@@ -1875,9 +1803,7 @@ fn fuseQuantifiers(
             i += 1;
         }
 
-        const _sq = sq;
-
-        return analyzeRegexTokens(_sq[0..i]);
+        return sq[0..i]; // don't reference at runtime
     }
 }
 
@@ -1963,16 +1889,113 @@ fn RegexOR(
 
 fn RegexAND(
     // used for anything outside of [] clauses,
-    comptime this: type,
-    comptime next: type,
+    comptime lhs: type,
+    comptime rhs: type,
 ) type {
     return struct {
         pub fn call(str: []const u8, i: usize) ?usize {
-            const j = this.call(str, i) orelse return null;
-            if (comptime @hasDecl(next, "call")) {
-                return next.call(str, j);
+
+            // NOTE:
+            //  any time an index had add assignment,
+            //  use call(str[i..], 0) to only add the
+            //  next N matches. Otherwise, always pass
+            //  ass call(str, i) to accumulate.
+
+            if (comptime !@hasDecl(rhs, "call")) {
+                if (comptime lhs.quantifier) |q| {
+
+                    switch (q) {
+                        .any => {
+                            var idx: usize = i;
+                            while (true) {
+                                idx += lhs.call(str[idx..], 0) orelse return idx;
+                            } 
+                        },
+                        .exact => |n| {
+                            var idx: usize = i;
+                            for (0..n) |_| {
+                                idx += lhs.call(str[idx..], 0) orelse return null;
+                            }
+                            return idx;
+                        },
+                        .between => |b| {
+                            var idx: usize = i;
+                            var count: usize = 0;
+                            while (count < b.start) : (count += 1) {
+                                idx += lhs.call(str[idx..], 0) orelse return null;
+                            }
+                            while (count < b.stop) : (count += 1) {
+                                idx += lhs.call(str[idx..], 0) orelse break;
+                            }
+                            return idx;
+                        },
+                        .one_or_more => {
+                            var idx = lhs.call(str, i) orelse return null;
+                            
+                            while (true) {
+                                idx += lhs.call(str[idx..], 0) orelse break;
+                            }
+                            return idx;
+                        },
+                        .optional => {
+                            return lhs.call(str, i) orelse i;
+                        },                    
+                    }
+                } else {
+                    return lhs.call(str, i);
+                }
+            }
+
+            if (comptime lhs.quantifier) |q| {
+                switch (q) {
+                    .any => {
+                        var idx: usize = i;
+                        var last: ?usize = null;
+                        while (true) {
+                            last = rhs.call(str, idx) orelse last;
+                            idx += lhs.call(str[idx..], 0) orelse break;
+                        } 
+                        return rhs.call(str, idx) orelse last;
+                    },
+                    .exact => |n| {
+                        var idx: usize = i;
+                        for (0..n) |_| {
+                            idx += lhs.call(str[idx..], 0) orelse return null;
+                        }
+                        return rhs.call(str, idx);
+                    },
+                    .between => |b| {
+                        var idx: usize = i;
+                        var count: usize = 0;
+                        while (count < b.start) : (count += 1) {
+                            idx += lhs.call(str[idx..], 0) orelse return null;
+                        }
+                        var last: ?usize = null;
+                        while (count < b.stop) : (count += 1) {
+                            last = rhs.call(str, idx) orelse last;
+                            idx += lhs.call(str[idx..], 0) orelse break;
+                        }
+                        return rhs.call(str[idx..], 0) orelse last;
+                    },
+                    .one_or_more => {
+                        var idx: usize = lhs.call(str, i) orelse return null;
+                        
+                        var last: ?usize = null;
+                        while (true) {
+                            last = rhs.call(str, idx) orelse last;
+                            idx += lhs.call(str[idx..], 0) orelse break;
+                        }
+                        return rhs.call(str, idx) orelse last;
+                    },
+                    .optional => {
+                        const j = lhs.call(str, i) orelse return rhs.call(str, i);
+
+                        return rhs.call(str, j) orelse rhs.call(str, i);
+                    },                    
+                }
             } else {
-                return j;
+                const j = lhs.call(str, i) orelse return null;
+                return rhs.call(str, j);
             }
         }
     };
@@ -1997,99 +2020,15 @@ fn RegexNAND(
 }
 
 fn RegexUnit(
-    comptime callable: anytype,
-    comptime quantifier: ?RegexQuantifier,
-) type {
-    return if (@typeInfo(@TypeOf(callable)) == .Fn) struct {
-        pub fn call(str: []const u8, i: usize) ?usize {
-            if (comptime quantifier) |q| {
-                var idx: usize = i;
-
-                switch (comptime q) {
-                    .exact => |n| {
-                        for (0..n) |_| {
-                            if (idx < str.len and callable(str[idx])) {
-                                idx += 1;
-                            } else {
-                                return null;
-                            }
-                        }
-                    },
-                    .between => |b| {
-                        var count: usize = 0;
-                        while (idx < str.len and count < b.stop) : ({
-                            count += 1;
-                            idx += 1;
-                        }) {
-                            if (!callable(str[idx])) break;
-                        }
-                        if (count < b.start)
-                            return null;
-                    },
-                    .any => {
-                        while (idx < str.len and callable(str[idx])) idx += 1;
-                    },
-                    .one_or_more => {
-                        var count: usize = 0;
-                        while (idx < str.len) : ({
-                            count += 1;
-                            idx += 1;
-                        }) {
-                            if (!callable(str[idx])) break;
-                        }
-                        if (count < 1)
-                            return null;
-                    },
-                    .optional => { // can be empty
-                        if (idx < str.len and callable(str[idx])) idx += 1;
-                    },
-                }
-                return idx;
-            } else {
+    comptime Callable: anytype,
+    comptime Quantifier: ?RegexQuantifier,
+) type {    
+    return struct {
+        pub const callable = Callable;
+        pub const quantifier = Quantifier;
+        pub inline fn call(str: []const u8, i: usize) ?usize {
+            if (comptime @typeInfo(@TypeOf(Callable)) == .Fn) {                
                 return if (i < str.len and callable(str[i])) i + 1 else null;
-            }
-        }
-    } else struct {
-        pub fn call(str: []const u8, i: usize) ?usize {
-            if (comptime quantifier) |q| {
-                var idx: usize = i;
-
-                switch (comptime q) {
-                    .exact => |n| {
-                        for (0..n) |_| {
-                            if (idx < str.len) {
-                                idx += callable.call(str[idx..], 0) orelse return null;
-                            } else {
-                                return null;
-                            }
-                        }
-                    },
-                    .between => |b| {
-                        var count: usize = 0;
-                        while (idx < str.len and count < b.stop) : (count += 1) {
-                            idx += callable.call(str[idx..], 0) orelse break;
-                        }
-                        if (count < b.start)
-                            return null;
-                    },
-                    .any => {
-                        while (idx < str.len)
-                            idx += callable.call(str[idx..], 0) orelse break;
-                    },
-                    .one_or_more => {
-                        var count: usize = 0;
-                        while (idx < str.len) : (count += 1) {
-                            idx += callable.call(str[idx..], 0) orelse break;
-                        }
-                        if (count < 1)
-                            return null;
-                    },
-                    .optional => { // can be empty
-                        if (idx < str.len)
-                            idx += callable.call(str[idx..], 0) orelse @as(usize, 0);
-                    },
-                }
-                return idx;
             } else {
                 return callable.call(str, i);
             }
@@ -2197,14 +2136,10 @@ fn ParseRegexTreeDepth(
                         },
                         .s => null,
                     };
-                    // closing is a bracket or quantifier
-                    if (closing + 1 >= _sq.len) {
-                        _sq = _sq[0..0]; // exhaust
-                    } else {
-                        _sq = _sq[closing + 1 ..];
-                    }
-                    // don't wrap with quantifier if unnecessary
-                    break :outer if (q) |_q| RegexUnit(T, _q) else T;
+
+                    _sq = _sq[closing + 1 ..];
+
+                    break :outer RegexUnit(T, q);
                 }
 
                 use_nand = s.negated and s.in_square;
