@@ -1616,7 +1616,7 @@ fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
 
         const value = escaped[i].char - '0';
         count += value * coefficient;
-        coefficient *= 10;
+        coefficient *%= 10;
     }
     return count;
 }
