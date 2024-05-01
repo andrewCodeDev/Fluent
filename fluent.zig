@@ -2112,7 +2112,7 @@ fn RegexAND(
                             last = rhs.call(str, idx) orelse last;
                             idx += lhs.call(str[idx..], 0) orelse break;
                         }
-                        return rhs.call(str[idx..], 0) orelse last;
+                        return rhs.call(str, idx) orelse last;
                     },
                     .one_or_more => {
                         var idx: usize = lhs.call(str, i) orelse return null;
