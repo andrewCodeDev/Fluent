@@ -2476,43 +2476,34 @@ test "containsFrom(self, mode, needle)          : scalar\n" {
     }
 }
 
-//test "containsFrom(self, mode, needle)          : sequence\n" {
-//    const self = init("This is a test");
-//
-//    {
-//        const result = self.containsFrom(.sequence, 0, "This");
-//        try expect(result == true);
-//    }
-//
-//    {
-//        const result = self.containsFrom(.sequence, 9, "test");
-//        try expect(result == true);
-//    }
-//
-//    {
-//        const result = self.containsFrom(.sequence, 5, "is");
-//        try expect(result == true);
-//    }
-//}
-//
-//test "containsFrom(self, mode, needle)          : any\n" {
-//    const self = init("This is a test");
-//
-//    {
-//        const result = self.containsFrom(.sequence, 0, "This");
-//        try expect(result == true);
-//    }
-//
-//    {
-//        const result = self.containsFrom(.sequence, 9, "test");
-//        try expect(result == true);
-//    }
-//
-//    {
-//        const result = self.containsFrom(.sequence, 5, "is");
-//        try expect(result == true);
-//    }
-//}
+test "containsFrom(self, mode, needle)          : sequence\n" {
+    const self = init("This is a test");
+
+    {
+        const result = self.containsFrom(.regex, 0, "This");
+        try expect(result == true);
+    }
+    {
+        const result = self.containsFrom(.regex, 9, "test");
+        try expect(result == true);
+    }
+    {
+        const result = self.containsFrom(.regex, 5, "is");
+        try expect(result == true);
+    }
+    {
+        const result = self.containsFrom(.regex, 0, "[This]");
+        try expect(result == true);
+    }
+    {
+        const result = self.containsFrom(.regex, 9, "[test]");
+        try expect(result == true);
+    }
+    {
+        const result = self.containsFrom(.regex, 5, "[is]");
+        try expect(result == true);
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
