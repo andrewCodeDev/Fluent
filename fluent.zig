@@ -2514,19 +2514,17 @@ test "contains(self, mode, needle)             : scalar\n" {
         const result = self.contains(.scalar, 'T');
         try expect(result == true);
     }
-
     {
         const result = self.contains(.scalar, 'z');
         try expect(result == true);
     }
-
     {
         const result = self.contains(.scalar, 's');
         try expect(result == true);
     }
 }
 
-test "contains(self, mode, needle)             : sequence\n" {
+test "contains(self, mode, needle)             : regex\n" {
     const self = init("This is a testz");
 
     {
