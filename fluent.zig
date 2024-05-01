@@ -1607,7 +1607,7 @@ fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
     comptime var count: usize = 0;
     comptime var coefficient: usize = 1;
     comptime var i: usize = escaped.len;
-    while (i > 0) {
+    inline while (i > 0) {
         i -= 1;
 
         if (comptime !std.ascii.isDigit(escaped[i].char)) {
@@ -3948,4 +3948,31 @@ test "bracketSet(comptime symbol)              : []const u8" {
             },
         }
     }
+}
+
+test "parseQuantity(comptime escaped)          : usize" {
+    const test_usize_max = [20]RegexEscaped{
+        .{ .escaped = true, .char = '1' },
+        .{ .escaped = true, .char = '8' },
+        .{ .escaped = true, .char = '4' },
+        .{ .escaped = true, .char = '4' },
+        .{ .escaped = true, .char = '6' },
+        .{ .escaped = true, .char = '7' },
+        .{ .escaped = true, .char = '4' },
+        .{ .escaped = true, .char = '4' },
+        .{ .escaped = true, .char = '0' },
+        .{ .escaped = true, .char = '7' },
+        .{ .escaped = true, .char = '3' },
+        .{ .escaped = true, .char = '7' },
+        .{ .escaped = true, .char = '0' },
+        .{ .escaped = true, .char = '9' },
+        .{ .escaped = true, .char = '5' },
+        .{ .escaped = true, .char = '5' },
+        .{ .escaped = true, .char = '1' },
+        .{ .escaped = true, .char = '6' },
+        .{ .escaped = true, .char = '1' },
+        .{ .escaped = true, .char = '5' },
+    };
+
+    try expect(parseQuantity(&test_usize_max) == 18_446_744_073_709_551_615);
 }
