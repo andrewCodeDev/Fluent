@@ -115,9 +115,79 @@ pub fn MatchIterator(
 
 pub fn match(
     comptime expression: []const u8,
-    string: []const u8,
+    source: []const u8,
 ) MatchIterator(expression) {
-    return MatchIterator(expression).init(string);
+    return MatchIterator(expression).init(source);
+}
+
+
+const StringOptions = union{ 
+    regex: []const u8,
+    scalar: u8,
+};
+
+fn SplitIterator(comptime expression: []const u8) type {
+    return struct {
+        const Self = @This();
+        const tree = ParseRegexTree(expression);
+        items: []const u8,
+        index: ?usize,
+
+        pub fn init(items: []const u8) Self {
+            return .{ .items = items, .index = 0 };
+        }
+
+        pub fn next(self: *Self) ?[]const u8 {
+            const start = self.index orelse return null;
+            var stop: usize = start;
+            const end: ?usize = blk: {  
+                while (stop < self.items.len) : (stop += 1) {
+                    if (tree.call(self.items, stop)) |n| break :blk n else continue;                    
+                } else break: blk null;
+            };
+            defer self.index = end;
+            return self.items[start..stop];
+        }
+    };
+}
+
+pub fn split(
+    comptime expression: []const u8,
+    source: []const u8,
+) SplitIterator(expression) {
+    return SplitIterator(expression).init(source);
+}
+
+fn TokenIterator(comptime expression: []const u8) type {
+    return struct {
+        const Self = @This();
+        const tree = ParseRegexTree(expression);
+        items: []const u8,
+        index: ?usize,
+
+        pub fn init(items: []const u8) Self {
+            return .{ .items = items, .index = 0 };
+        }
+
+        pub fn next(self: *Self) ?[]const u8 {
+            const start = self.index orelse return null;
+            var stop: usize = start;
+            const end: ?usize = blk: {  
+                while (stop < self.items.len) : (stop += 1) {
+                    if (tree.call(self.items, stop)) |n| break :blk n else continue;                    
+                } else break: blk null;
+            };
+            defer self.index = end;
+            return self.items[start..stop];
+        }        
+    };
+}
+
+pub fn tokenize(
+    comptime expression: []const u8,
+    source: []const u8,
+) SplitIterator(expression) {
+    return SplitIterator(expression).init(source);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
