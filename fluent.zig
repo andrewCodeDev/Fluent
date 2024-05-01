@@ -3896,3 +3896,14 @@ test "isRegexFilter(symbol)                    : bool" {
         try expect(isRegexFilter(rf) == true);
     }
 }
+
+test "isRegexQuantifier(symbol)                : bool" {
+    const test_case = [_]u8{ '+', '?', '*', '{' };
+    for (test_case) |case| {
+        const rq: RegexEscaped = .{
+            .char = case,
+            .escaped = false,
+        };
+        try expect(isRegexQuantifier(rq) == true);
+    }
+}
