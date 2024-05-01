@@ -2103,6 +2103,26 @@ fn anyRegex(_: u8) bool {
     return true;
 }
 
+fn isWordCharacter(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '_';
+}
+
+fn isVerticalWhitespace(c: u8) bool {
+    return switch (c) {
+        '\n', '\x85',
+        std.ascii.control_code.cr, 
+        std.ascii.control_code.vt, 
+        std.ascii.control_code.ff => true, else => false,
+    };
+}
+
+fn isHorizontalWhitespace(c: u8) bool {
+    return switch (c) {
+        ' ', '\t' => true, else => false,
+    };
+}
+
+
 fn ParseRegexTreeDepth(
     comptime sq: []const RegexSymbol,
     comptime enclosing: u8,
@@ -2167,12 +2187,16 @@ fn ParseRegexTreeDepth(
 
                 if (s.escaped) {
                     switch (s.char) {
-                        'w' => break :outer RegexUnit(InvertRegex(true, s.negated, std.ascii.isAlphanumeric), q),
-                        'W' => break :outer RegexUnit(InvertRegex(false, s.negated, std.ascii.isAlphanumeric), q),
+                        'w' => break :outer RegexUnit(InvertRegex(true, s.negated, isWordCharacter), q),
+                        'W' => break :outer RegexUnit(InvertRegex(false, s.negated, isWordCharacter), q),
                         'd' => break :outer RegexUnit(InvertRegex(true, s.negated, std.ascii.isDigit), q),
                         'D' => break :outer RegexUnit(InvertRegex(false, s.negated, std.ascii.isDigit), q),
                         's' => break :outer RegexUnit(InvertRegex(true, s.negated, std.ascii.isWhitespace), q),
                         'S' => break :outer RegexUnit(InvertRegex(false, s.negated, std.ascii.isWhitespace), q),
+                        'h' => break :outer RegexUnit(InvertRegex(true, s.negated, isHorizontalWhitespace), q),
+                        'H' => break :outer RegexUnit(InvertRegex(false, s.negated, isHorizontalWhitespace), q),
+                        'v' => break :outer RegexUnit(InvertRegex(true, s.negated, isVerticalWhitespace), q),
+                        'V' => break :outer RegexUnit(InvertRegex(false, s.negated, isVerticalWhitespace), q),
                         else => {},
                     }
                 } else {
