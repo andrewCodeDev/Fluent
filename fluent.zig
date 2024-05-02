@@ -1810,7 +1810,7 @@ fn fuseQuantifiers(
             }
 
             // implements negated set syntax: [^abc] -> not a, b, or c
-            if (es[j].char == '^' and in_square and (j -| 1) == square_head) {
+            if (es[j].char == '^' and in_square and (j -| 1) == square_head and !es[j].escaped) {
                 negated = true;
                 continue;
             }
