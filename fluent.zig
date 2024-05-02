@@ -3015,7 +3015,7 @@ test "split(self, mode, delimiter)             : SplitIterator\n" {
 // @TEST : IMMUTABLE STRING BACKEND                                           //
 ////////////////////////////////////////////////////////////////////////////////
 
-test "isDigit(self)                            : bool" {
+test "isDigit(self)                            : bool\n" {
     const test_case = [_][]const u8{ "0", "0123456789", "oops!0123456789", "0123456789oops!" };
     const expected = [_]bool{ true, true, false, false };
 
@@ -3029,7 +3029,7 @@ test "isDigit(self)                            : bool" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "isAlpha(self)                            : bool" {
+test "isAlpha(self)                            : bool\n" {
     const test_case = [_][]const u8{ "a", "aaaaaaaaaa", "7aaaaaaaaaaa", "aaaaaaaaaaa7" };
     const expected = [_]bool{ true, true, false, false };
 
@@ -3043,7 +3043,7 @@ test "isAlpha(self)                            : bool" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "isSpaces(self)                           : bool" {
+test "isSpaces(self)                           : bool\n" {
     const test_case = [_][]const u8{ " ", "          ", "7           ", "           7" };
     const expected = [_]bool{ true, true, false, false };
 
@@ -3057,7 +3057,7 @@ test "isSpaces(self)                           : bool" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "isLower(self)                            : bool" {
+test "isLower(self)                            : bool\n" {
     const test_case = [_][]const u8{ "a", "aaaaaaaaaa", "Aaaaaaaaaaa", "aaaaaaaaaaaA" };
     const expected = [_]bool{ true, true, false, false };
 
@@ -3071,7 +3071,7 @@ test "isLower(self)                            : bool" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "isUpper(self)                            : bool" {
+test "isUpper(self)                            : bool\n" {
     const test_case = [_][]const u8{ "A", "AAAAAAAAAA", "aAAAAAAAAAA", "AAAAAAAAAAAa" };
     const expected = [_]bool{ true, true, false, false };
 
@@ -3085,7 +3085,7 @@ test "isUpper(self)                            : bool" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "isHex(self)                              : bool" {
+test "isHex(self)                              : bool\n" {
     const test_case = [_][]const u8{ "0", "0123456789ABCDEF", "0123456789abcdef", "0123456789abcdefZig" };
     const expected = [_]bool{ true, true, true, false };
 
@@ -3099,7 +3099,7 @@ test "isHex(self)                              : bool" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "isASCII(self)                            : bool" {
+test "isASCII(self)                            : bool\n" {
     const self = init(try testing_allocator.alloc(u8, 255));
     defer testing_allocator.free(self.items);
     for (self.items, 0..255) |*item, i| item.* = @truncate(i);
@@ -3117,7 +3117,7 @@ test "isASCII(self)                            : bool" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "isPrintable(self)                        : bool" {
+test "isPrintable(self)                        : bool\n" {
     const self = init(try testing_allocator.alloc(u8, 255));
     defer testing_allocator.free(self.items);
     for (self.items, 0..255) |*item, i| item.* = @truncate(i);
@@ -3135,7 +3135,7 @@ test "isPrintable(self)                        : bool" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "isAlnum(self)                            : bool" {
+test "isAlnum(self)                            : bool\n" {
     const self = init(try testing_allocator.alloc(u8, 255));
     defer testing_allocator.free(self.items);
     for (self.items, 0..255) |*item, i| item.* = @truncate(i);
@@ -3165,7 +3165,7 @@ test "isAlnum(self)                            : bool" {
 // @TEST : MUTABLE BACKEND                                                    //
 ////////////////////////////////////////////////////////////////////////////////
 
-test "sort(self, opt)                          : MutSelf" {
+test "sort(self, opt)                          : MutSelf\n" {
     const test_case = [_][]const i32{
         &[_]i32{ 6, 5, 4, 3, 2, 1 },
         &[_]i32{ 1, 2, 3, 6, 5, 4 },
@@ -3203,7 +3203,7 @@ test "sort(self, opt)                          : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "fill(self, scalar)                       : MutSelf" {
+test "fill(self, scalar)                       : MutSelf\n" {
     var buffer: [32]u8 = undefined;
 
     {
@@ -3216,7 +3216,7 @@ test "fill(self, scalar)                       : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "copy(self, scalar)                       : MutSelf" {
+test "copy(self, scalar)                       : MutSelf\n" {
     var buffer: [32]u8 = undefined;
 
     {
@@ -3228,7 +3228,7 @@ test "copy(self, scalar)                       : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "concat(self, items, concat_buffer)       : MutSelf" {
+test "concat(self, items, concat_buffer)       : MutSelf\n" {
     const start = "This";
     const expected = "This is a string";
     var start_buffer: [4]u8 = undefined;
@@ -3244,7 +3244,7 @@ test "concat(self, items, concat_buffer)       : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "join(self, collection, join_buffer)      : MutSelf" {
+test "join(self, collection, join_buffer)      : MutSelf\n" {
     const collection = &[_][]const u8{
         "11",
         "222",
@@ -3350,7 +3350,7 @@ test "join(self, collection, join_buffer)      : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "rotate(self, amount)                     : MutSelf" {
+test "rotate(self, amount)                     : MutSelf\n" {
     const string = "00110011";
     var buffer: [8]u8 = undefined;
 
@@ -3378,7 +3378,7 @@ test "rotate(self, amount)                     : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "reverse(self)                            : MutSelf" {
+test "reverse(self)                            : MutSelf\n" {
     const string = "00110011";
     var buffer: [8]u8 = undefined;
 
@@ -3400,7 +3400,7 @@ test "reverse(self)                            : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "setAt(self, idx, with)                   : MutSelf" {
+test "setAt(self, idx, with)                   : MutSelf\n" {
     const string = "aabbccdd";
     var buffer: [8]u8 = undefined;
 
@@ -3527,7 +3527,7 @@ test "setAt(self, idx, with)                   : MutSelf" {
 // @TEST : MUTABLE STRING BACKEND                                             //
 ////////////////////////////////////////////////////////////////////////////////
 
-test "lower(self)                              : MutSelf" {
+test "lower(self)                              : MutSelf\n" {
     const string = "THIS IS A STRING";
     var string_buffer: [16]u8 = undefined;
 
@@ -3549,7 +3549,7 @@ test "lower(self)                              : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "upper(self)                              : MutSelf" {
+test "upper(self)                              : MutSelf\n" {
     const string = "this is a string";
     var string_buffer: [16]u8 = undefined;
 
@@ -3571,7 +3571,7 @@ test "upper(self)                              : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "capitalize(self)                         : MutSelf" {
+test "capitalize(self)                         : MutSelf\n" {
     const string = "THIS IS A STRING";
     var string_buffer: [16]u8 = undefined;
 
@@ -3593,7 +3593,7 @@ test "capitalize(self)                         : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "title(self)                              : MutSelf" {
+test "title(self)                              : MutSelf\n" {
     const string = "THIS IS A STRING";
     var string_buffer: [16]u8 = undefined;
 
@@ -3615,7 +3615,7 @@ test "title(self)                              : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "differenceWith(self, string, buffer)     : MutSelf" {
+test "differenceWith(self, string, buffer)     : MutSelf\n" {
     const string = "abcd";
     const diff = "abce";
     var start_buffer: [4]u8 = undefined;
@@ -3631,7 +3631,7 @@ test "differenceWith(self, string, buffer)     : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "unionWith(self, string, buffer)          : MutSelf" {
+test "unionWith(self, string, buffer)          : MutSelf\n" {
     const string = "abcd";
     const diff = "abce";
     var start_buffer: [4]u8 = undefined;
@@ -3647,7 +3647,7 @@ test "unionWith(self, string, buffer)          : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "intersectWith(self, string, buffer)      : MutSelf" {
+test "intersectWith(self, string, buffer)      : MutSelf\n" {
     const string = "abcd";
     const diff = "abce";
     var start_buffer: [4]u8 = undefined;
@@ -3663,7 +3663,7 @@ test "intersectWith(self, string, buffer)      : MutSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "string integer and float parsing        : ConstSelf" {
+test "string integer and float parsing        : ConstSelf\n" {
     {
         const result = init("42").digit(usize) catch unreachable;
         try expect(result == 42);
@@ -3676,7 +3676,7 @@ test "string integer and float parsing        : ConstSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "filter                                  : ConstSelf" {
+test "filter                                  : ConstSelf\n" {
     const x = init("1ab2cd3hx45");
     var buffer: [32]u8 = undefined;
 
@@ -3692,7 +3692,7 @@ test "filter                                  : ConstSelf" {
 }
 ////////////////////////////////////////////////////////////////////////////////
 
-test "reduce                                  : ConstSelf" {
+test "reduce                                  : ConstSelf\n" {
     const all_g = struct {
         fn call(a: bool, b: anytype) bool {
             return a and (b == 'g');
@@ -3714,7 +3714,7 @@ test "reduce                                  : ConstSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "mapReduce                                 : ConstSelf" {
+test "mapReduce                                 : ConstSelf\n" {
     const has_g = struct {
         fn call(a: bool, b: anytype) bool {
             return a or (b == 'g');
@@ -3729,7 +3729,7 @@ test "mapReduce                                 : ConstSelf" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-test "iterator                                 : empty range" {
+test "iterator                                 : empty range\n" {
     const slice: []const u8 = "hello";
     const empty: []const u8 = slice[0..0];
     {
@@ -3750,7 +3750,7 @@ test "iterator                                 : empty range" {
     }
 }
 
-test "iterator                                 : next" {
+test "iterator                                 : next\n" {
     {
         var itr = Fluent.iterator(.forward, "hello");
         try std.testing.expectEqual(itr.next().?, 'h');
@@ -3771,7 +3771,7 @@ test "iterator                                 : next" {
     }
 }
 
-test "iterator                                 : window" {
+test "iterator                                 : window\n" {
     {
         var itr = Fluent.iterator(.forward, "hello");
         try std.testing.expectEqualSlices(u8, itr.window(3).?, "hel");
@@ -3788,7 +3788,7 @@ test "iterator                                 : window" {
     }
 }
 
-test "regex:                                    : match iterator" {
+test "regex:                                    : match iterator\n" {
     { // match special characters (typical) - one or more
         var itr = match("\\d+", "123a456");
         try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "123");
@@ -3871,71 +3871,7 @@ test "regex:                                    : match iterator" {
     }
 }
 
-test "isRegexFilter(symbol)                    : bool" {
-    const test_case = [_]u8{ 'w', 'W', 's', 'S', 'd', 'D', '.' };
-    for (test_case) |case| {
-        const rf: RegexEscaped = .{
-            .char = case,
-            .escaped = true,
-        };
-        try expect(isRegexFilter(rf) == true);
-    }
-}
-
-test "isRegexQuantifier(symbol)                : bool" {
-    const test_case = [_]u8{ '+', '?', '*', '{' };
-    for (test_case) |case| {
-        const rq: RegexEscaped = .{
-            .char = case,
-            .escaped = false,
-        };
-        try expect(isRegexQuantifier(rq) == true);
-    }
-}
-
-test "isRegexBracket(symbol)                   : bool" {
-    const test_case = [_]u8{ '(', ')', '[', ']' };
-    for (test_case) |case| {
-        const rc: RegexCharacter = .{
-            .char = case,
-            .escaped = false,
-            .negated = undefined,
-            .in_square = undefined,
-        };
-        try expect(isRegexBracket(rc) == true);
-    }
-}
-
-test "bracketSet(comptime symbol)              : []const u8" {
-    inline for (32..127) |case| {
-        switch (case) {
-            '(' => {
-                const rc: RegexCharacter = .{
-                    .char = @truncate(case),
-                    .escaped = false,
-                    .negated = undefined,
-                    .in_square = undefined,
-                };
-                const result = bracketSet(rc);
-                try expect(result[0] == '(');
-                try expect(result[1] == ')');
-            },
-            else => {
-                const rc: RegexCharacter = .{
-                    .char = @truncate(case),
-                    .escaped = false,
-                    .negated = undefined,
-                    .in_square = undefined,
-                };
-                const result = bracketSet(rc);
-                try expect(result[0] == '[');
-                try expect(result[1] == ']');
-            },
-        }
-    }
-}
-
-test "parseQuantity(comptime escaped)          : usize" {
+test "parseQuantity(comptime escaped)          : usize\n" {
     {
         const test_usize_max = [20]RegexEscaped{
             .{ .escaped = true, .char = '1' },
@@ -3981,7 +3917,7 @@ test "parseQuantity(comptime escaped)          : usize" {
     }
 }
 
-test "regex-engine1                            : match iterator -> regex" {
+test "regex-engine1                            : match iterator -> regex\n" {
     {
         const expression = "\\d+";
         const string = "0123456789";
@@ -3991,7 +3927,7 @@ test "regex-engine1                            : match iterator -> regex" {
     }
 }
 
-test "regex-engine2                            : match iterator -> regex" {
+test "regex-engine2                            : match iterator -> regex\n" {
     {
         const expression = "\\d+";
         const string = "0123456789";
@@ -4001,7 +3937,7 @@ test "regex-engine2                            : match iterator -> regex" {
     }
 }
 
-test "regex-engine3                            : match iterator -> regex" {
+test "regex-engine3                            : match iterator -> regex\n" {
     {
         const expression = "\\d+";
         const string = "aa0123456789aa";
@@ -4011,7 +3947,7 @@ test "regex-engine3                            : match iterator -> regex" {
     }
 }
 
-test "regex-engine4                            : match iterator -> regex" {
+test "regex-engine4                            : match iterator -> regex\n" {
     {
         const expression = "\\d+";
         const string = "\\dDmW0123456789aa\\1:";
@@ -4021,7 +3957,7 @@ test "regex-engine4                            : match iterator -> regex" {
     }
 }
 
-test "regex-engine5                            : match iterator -> regex" {
+test "regex-engine5                            : match iterator -> regex\n" {
     // @SOLVED
     {
         const expression = "\\d*";
@@ -4032,7 +3968,7 @@ test "regex-engine5                            : match iterator -> regex" {
     }
 }
 
-test "regex-engine6                            : match iterator -> regex" {
+test "regex-engine6                            : match iterator -> regex\n" {
     // @SOLVED
     {
         const expression = "\\d?";
@@ -4043,7 +3979,7 @@ test "regex-engine6                            : match iterator -> regex" {
     }
 }
 
-test "regex-engine7                            : match iterator -> regex" {
+test "regex-engine7                            : match iterator -> regex\n" {
     {
         const expression = "\\d{10}";
         const string = "abc0123456789abc";
@@ -4053,7 +3989,7 @@ test "regex-engine7                            : match iterator -> regex" {
     }
 }
 
-test "regex-engine8                            : match iterator -> regex" {
+test "regex-engine8                            : match iterator -> regex\n" {
     {
         const expression = "\\d{00000000000000000000000000000000000000010}";
         const string = "abc0123456789abc";
@@ -4062,7 +3998,7 @@ test "regex-engine8                            : match iterator -> regex" {
         try expectEqSlice(u8, "0123456789", result);
     }
 }
-test "regex-engine9                            : match iterator -> regex" {
+test "regex-engine9                            : match iterator -> regex\n" {
     {
         const expression = "\\d{11}";
         const string = "abc0123456789abc";
@@ -4072,7 +4008,7 @@ test "regex-engine9                            : match iterator -> regex" {
     }
 }
 
-test "regex-engine10                           : match iterator -> regex" {
+test "regex-engine10                           : match iterator -> regex\n" {
     // @SOLVED
     {
         const expression = "\\d{0,10}";
@@ -4083,7 +4019,7 @@ test "regex-engine10                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine11                           : match iterator -> regex" {
+test "regex-engine11                           : match iterator -> regex\n" {
     {
         const expression = "\\D\\D\\D\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\D\\D\\D";
         const string = "abc0123456789abc";
@@ -4104,7 +4040,7 @@ test "regex-engine11                           : match iterator -> regex" {
 //     }
 // }
 
-test "regex-engine13                           : match iterator -> regex" {
+test "regex-engine13                           : match iterator -> regex\n" {
     {
         const expression = "\\D|\\d";
         const string = "abc0123456789abc";
@@ -4116,7 +4052,7 @@ test "regex-engine13                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine14                           : match iterator -> regex" {
+test "regex-engine14                           : match iterator -> regex\n" {
     // @SOLVED
     {
         const expression = "\\D?|\\d?";
@@ -4129,7 +4065,7 @@ test "regex-engine14                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine15                           : match iterator -> regex" {
+test "regex-engine15                           : match iterator -> regex\n" {
     // @SOLVED
     {
         const expression = "[abc]{3}|[0-9]{10}";
@@ -4141,7 +4077,7 @@ test "regex-engine15                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine16                           : match iterator -> regex" {
+test "regex-engine16                           : match iterator -> regex\n" {
     {
         const expression = "\\D[abc]+|\\d[0-9]+";
         const string = "abc0123456789abc";
@@ -4152,7 +4088,7 @@ test "regex-engine16                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine17                           : match iterator -> regex" {
+test "regex-engine17                           : match iterator -> regex\n" {
     {
         const expression = "[abc]?|[0-9]{10}";
         const string = "abc0123456789abc";
@@ -4167,7 +4103,7 @@ test "regex-engine17                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine18                           : match iterator -> regex" {
+test "regex-engine18                           : match iterator -> regex\n" {
     {
         const expression = "\\d{3}([A-Za-z]+)\\d{3}";
         const string = "123Fluent123";
@@ -4176,7 +4112,7 @@ test "regex-engine18                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine19                           : match iterator -> regex" {
+test "regex-engine19                           : match iterator -> regex\n" {
     {
         const expression = "(\\d{3}([A-Za-z]+))?|\\d{3}";
         const string = "123Fluent123";
@@ -4186,7 +4122,7 @@ test "regex-engine19                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine20                           : match iterator -> regex" {
+test "regex-engine20                           : match iterator -> regex\n" {
     {
         const expression = "(([a-z][0-9])|([a-z][0-9]))+";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4195,7 +4131,7 @@ test "regex-engine20                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine21                           : match iterator -> regex" {
+test "regex-engine21                           : match iterator -> regex\n" {
     {
         const expression = "(([a-z][0-9])|([a-z][0-9])?)+";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4204,7 +4140,7 @@ test "regex-engine21                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine22                           : match iterator -> regex" {
+test "regex-engine22                           : match iterator -> regex\n" {
     {
         const expression = "(([a-z]?[0-9]?)?|([a-z]?[0-9]?)?)+";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4213,7 +4149,7 @@ test "regex-engine22                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine23                           : match iterator -> regex" {
+test "regex-engine23                           : match iterator -> regex\n" {
     {
         const expression = "(([a-z]?[0-9]?)?|([a-z]?[0-9]?)?)+";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4222,7 +4158,7 @@ test "regex-engine23                           : match iterator -> regex" {
     }
 }
 
-test "regex-engine24                          : match iterator -> regex" {
+test "regex-engine24                          : match iterator -> regex\n" {
     {
         const expression = "^(([a-z][0-9])|([a-z][0-9]))";
         const string = "a1b2c3d4e5f6g7h8";
@@ -4231,7 +4167,7 @@ test "regex-engine24                          : match iterator -> regex" {
     }
 }
 
-test "regex-engine25                          : match iterator -> regex" {
+test "regex-engine25                          : match iterator -> regex\n" {
     {
         const expression = "[^0-9]+";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -4241,7 +4177,7 @@ test "regex-engine25                          : match iterator -> regex" {
     }
 }
 
-test "regex-engine26                          : match iterator -> regex" {
+test "regex-engine26                          : match iterator -> regex\n" {
     {
         const expression = "[^0-8]+";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -4251,7 +4187,7 @@ test "regex-engine26                          : match iterator -> regex" {
     }
 }
 
-test "regex-engine27                          : match iterator -> regex" {
+test "regex-engine27                          : match iterator -> regex\n" {
     {
         const expression = "[^1-9]+";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -4261,7 +4197,7 @@ test "regex-engine27                          : match iterator -> regex" {
     }
 }
 
-test "regex-engine28                          : match iterator -> regex" {
+test "regex-engine28                          : match iterator -> regex\n" {
     {
         const expression = "([^a-z]+[^A-Z]+)";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
