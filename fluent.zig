@@ -1208,16 +1208,6 @@ fn ImmutableStringBackend(comptime Self: type) type {
             };
         }
 
-        pub fn tokenize(self: Self, comptime mode: StringMode, comptime delimiter: Parameter(u8, mode)) switch (mode) {
-            .scalar => std.mem.SplitIterator(u8, .scalar),
-            .regex => Fluent.MatchIterator(delimiter),
-        } {
-            return switch (mode) {
-                .scalar => std.mem.TokenIterator(u8, .scalar){ .buffer = self.items, .index = 0, .delimiter = delimiter },
-                .regex => Fluent.match(delimiter, self.items),
-            };
-        }
-
         pub fn differenceWith(
             self: Self,
             string: []const u8,
@@ -2030,12 +2020,17 @@ fn RegexAND(
                             while (count < b.start and idx < str.len) : (count += 1) {
                                 idx = lhs.call(str, idx, prev) orelse return null;
                             }
+
                             // idx < str.len can break above loop early
                             if (count < b.start) return null;
+
+                            // check if new match has occured
+                            const new_match = (i != idx) or prev;
                             
                             while (count < b.stop and idx < str.len) : (count += 1) {
-                                idx = lhs.call(str, idx, true) orelse break;
+                                idx = lhs.call(str, idx, new_match) orelse break;
                             }
+                            // idx could have advanced - check again
                             return if (prev or idx != i) idx else null;
                         },
                         .one_or_more => {
@@ -2095,8 +2090,8 @@ fn RegexAND(
                             last = rhs.call(str, idx, new_match) orelse last;
                             idx = lhs.call(str, idx, new_match) orelse break;
                         }
-                        // b.start could have been zero, but we could have matched
-                        return rhs.call(str, idx, new_match) orelse last;
+                        // idx could have advanced - check again
+                        return rhs.call(str, idx, (i != idx) or prev) orelse last;
                     },
 
                     .one_or_more => {
