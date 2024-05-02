@@ -2100,10 +2100,6 @@ fn RegexAND(
                     .between => |b| {
                         var idx: usize = i;
                         var count: usize = 0;
-                        if (b.start == 0 and b.stop == 1) {
-                            const j = lhs.call(str, i) orelse return rhs.call(str, i);
-                            return rhs.call(str, j) orelse rhs.call(str, i);
-                        }
                         while (count < b.start) : (count += 1) {
                             idx += lhs.call(str[idx..], 0) orelse return null;
                         }
@@ -4310,7 +4306,7 @@ test "regex-engine32                          : match iterator -> regex\n" {
     }
 }
 
-test "regex-engine33                          : match iterator -> regex" {
+test "regex-engine33                          : match iterator -> regex\n" {
     // @INVESTIGATE
     {
         const expression = "a+b+c+d+e+f+g+";
@@ -4339,7 +4335,7 @@ test "regex-engine35                          : match iterator -> regex\n" {
     }
 }
 
-test "regex-engine36                           : match iterator-> regex" {
+test "regex-engine36                           : match iterator-> regex\n" {
     {
         const expression = "(a)+(b)+(c)+(d)+(e)+(f)+(g)+";
         const string = "abcdefg";
@@ -4348,7 +4344,7 @@ test "regex-engine36                           : match iterator-> regex" {
     }
 }
 
-test "regex-engine37                           : match iterator-> regex" {
+test "regex-engine37                           : match iterator-> regex\n" {
     {
         const expression = "(a){0,1}(b){0,1}(c){0,1}(d){0,1}";
         const string = "abcdefg";
@@ -4356,3 +4352,4 @@ test "regex-engine37                           : match iterator-> regex" {
         try expectEqSlice(u8, "abcd", iter.next() orelse unreachable);
     }
 }
+
