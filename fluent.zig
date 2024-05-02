@@ -116,11 +116,6 @@ pub fn match(
     return MatchIterator(expression).init(source);
 }
 
-const StringOptions = union {
-    regex: []const u8,
-    scalar: u8,
-};
-
 fn SplitIterator(comptime expression: []const u8) type {
     return struct {
         const Self = @This();
@@ -680,7 +675,12 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             };
         }
 
-        pub fn trim(self: Self, comptime direction: DirectionOption, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) Self {
+        pub fn trim(
+            self: Self,
+            comptime direction: DirectionOption,
+            comptime opt: TrimOptions,
+            actor: Parameter(Self.DataType, opt),
+        ) Self {
             if (self.items.len <= 1) return self;
             const start: usize = if (direction == .left or direction == .periphery) trimLeft(self, opt, actor) else 0;
             const end: usize = if (direction == .right or direction == .periphery) trimRight(self, opt, actor) else self.items.len;
@@ -1195,8 +1195,61 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return find(self, mode, needle) != null;
         }
 
+        pub fn trim(
+            self: Self,
+            comptime direction: DirectionOption,
+            comptime mode: StringMode,
+            comptime needle: Parameter(Self.DataType, mode),
+        ) Self {
+            if (self.items.len <= 1) return self;
+            const start: usize = if (direction == .left or direction == .periphery) trimLeft(self, mode, needle) else 0;
+            const end: usize = if (direction == .right or direction == .periphery) trimRight(self, mode, needle) else self.items.len;
+            return .{ .items = self.items[start..end] };
+        }
+
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
+
+        fn trimLeft(
+            self: Self,
+            comptime opt: StringMode, comptime needle: Parameter(Self.DataType, opt), ) usize {
+            if (self.items.len <= 1) return 0;
+            var start: usize = 0;
+            const end: usize = self.items.len;
+            switch (opt) {
+                .scalar => {
+                    while (start < end and self.items[start] == needle) start += 1;
+                },
+                .regex => {
+                    const expression = "^(" ++ needle ++ ")";
+                    var itr = Fluent.match(expression, self.items);
+                    if (itr.next()) |_| {
+                        start = itr.index;
+                    }
+                },
+            }
+            return start;
+        }
+
+        fn trimRight(
+            self: Self,
+            comptime opt: StringMode, comptime needle: Parameter(Self.DataType, opt), ) usize {
+            if (self.items.len <= 1) return 0;
+            var end: usize = self.items.len;
+            switch (opt) {
+                .scalar => {
+                    while (end > 0 and self.items[end - 1] == needle) end -= 1;
+                },
+                .regex => {
+                    const expression = "(" ++ needle ++ ")$";
+                    var itr = Fluent.match(expression, self.items);
+                    if (itr.next()) |str| {
+                        end = (itr.index - str.len);
+                    }
+                },
+            }
+            return end;
+        }
 
         pub fn split(self: Self, comptime mode: StringMode, comptime delimiter: Parameter(u8, mode)) switch (mode) {
             .scalar => std.mem.SplitIterator(u8, .scalar),
