@@ -1210,47 +1210,6 @@ fn ImmutableStringBackend(comptime Self: type) type {
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
-        fn trimLeft(
-            self: Self,
-            comptime opt: StringMode, comptime needle: Parameter(Self.DataType, opt), ) usize {
-            if (self.items.len <= 1) return 0;
-            var start: usize = 0;
-            const end: usize = self.items.len;
-            switch (opt) {
-                .scalar => {
-                    while (start < end and self.items[start] == needle) start += 1;
-                },
-                .regex => {
-                    const expression = "^(" ++ needle ++ ")";
-                    var itr = Fluent.match(expression, self.items);
-                    if (itr.next()) |_| {
-                        start = itr.index;
-                    }
-                },
-            }
-            return start;
-        }
-
-        fn trimRight(
-            self: Self,
-            comptime opt: StringMode, comptime needle: Parameter(Self.DataType, opt), ) usize {
-            if (self.items.len <= 1) return 0;
-            var end: usize = self.items.len;
-            switch (opt) {
-                .scalar => {
-                    while (end > 0 and self.items[end - 1] == needle) end -= 1;
-                },
-                .regex => {
-                    const expression = "(" ++ needle ++ ")$";
-                    var itr = Fluent.match(expression, self.items);
-                    if (itr.next()) |str| {
-                        end = (itr.index - str.len);
-                    }
-                },
-            }
-            return end;
-        }
-
         pub fn split(self: Self, comptime mode: StringMode, comptime delimiter: Parameter(u8, mode)) switch (mode) {
             .scalar => std.mem.SplitIterator(u8, .scalar),
             .regex => Fluent.SplitIterator(delimiter),
@@ -1319,6 +1278,46 @@ fn ImmutableStringBackend(comptime Self: type) type {
         //  PRIVATE SECTION  //
         ///////////////////////
 
+        fn trimLeft(
+            self: Self,
+            comptime opt: StringMode, comptime needle: Parameter(Self.DataType, opt), ) usize {
+            if (self.items.len <= 1) return 0;
+            var start: usize = 0;
+            const end: usize = self.items.len;
+            switch (opt) {
+                .scalar => {
+                    while (start < end and self.items[start] == needle) start += 1;
+                },
+                .regex => {
+                    const expression = "^(" ++ needle ++ ")";
+                    var itr = Fluent.match(expression, self.items);
+                    if (itr.next()) |_| {
+                        start = itr.index;
+                    }
+                },
+            }
+            return start;
+        }
+
+        fn trimRight(
+            self: Self,
+            comptime opt: StringMode, comptime needle: Parameter(Self.DataType, opt), ) usize {
+            if (self.items.len <= 1) return 0;
+            var end: usize = self.items.len;
+            switch (opt) {
+                .scalar => {
+                    while (end > 0 and self.items[end - 1] == needle) end -= 1;
+                },
+                .regex => {
+                    const expression = "(" ++ needle ++ ")$";
+                    var itr = Fluent.match(expression, self.items);
+                    if (itr.next()) |str| {
+                        end = (itr.index - str.len);
+                    }
+                },
+            }
+            return end;
+        }
     };
 }
 
