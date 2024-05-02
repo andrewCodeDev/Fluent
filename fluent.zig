@@ -4353,3 +4353,35 @@ test "regex-engine37                           : match iterator-> regex\n" {
     }
 }
 
+test "regex-engine38                           : match iterator-> regex\n" {
+
+    {
+        const string = "Call us today at 123-456-7890 or 9876543210 to rewrite your DNA in Zig!";
+        var itr = Fluent.match("\\d{3}-\\d{3}-\\d{4}|\\d{10}", string);
+        try std.testing.expectEqualSlices(u8, "123-456-7890", itr.next() orelse unreachable);
+        try std.testing.expectEqualSlices(u8, "9876543210", itr.next() orelse unreachable);
+        try std.testing.expect(itr.next() == null);
+    }
+    {
+        const string = "Call us today at 123-456-7890 or 9876543210 to say hi!";
+        var itr = Fluent.match("\\d{3}-?\\d{3}-?\\d{4}", string);
+        try std.testing.expectEqualSlices(u8, "123-456-7890", itr.next() orelse unreachable);
+        try std.testing.expectEqualSlices(u8, "9876543210", itr.next() orelse unreachable);
+        try std.testing.expect(itr.next() == null);
+    }
+    {
+        const string = 
+            "Stock  tip: \"buy dog food\" " ++
+            "stock\ttips: \"Why bother\" " ++
+            "StOck Tips: \"eat bread\" " ++
+            "Stock   tips: \"get a job\" " ++
+            "great stock tip: \"I like turtles\"";
+            
+        var itr = Fluent.match("[sS]tock\\s{0,3}tips?: \"[^\"]+\"", string);
+        try std.testing.expectEqualSlices(u8, "Stock  tip: \"buy dog food\"", itr.next() orelse unreachable);
+        try std.testing.expectEqualSlices(u8, "stock\ttips: \"Why bother\"", itr.next() orelse unreachable);
+        try std.testing.expectEqualSlices(u8, "Stock   tips: \"get a job\"", itr.next() orelse unreachable);
+        try std.testing.expectEqualSlices(u8, "stock tip: \"I like turtles\"", itr.next() orelse unreachable);
+        try std.testing.expect(itr.next() == null);
+    }
+}
