@@ -1280,7 +1280,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
 
         fn trimLeft(
             self: Self,
-            comptime opt: StringMode, comptime needle: Parameter(Self.DataType, opt), ) usize {
+            comptime opt: StringMode,
+            comptime needle: Parameter(Self.DataType, opt),
+        ) usize {
             if (self.items.len <= 1) return 0;
             var start: usize = 0;
             const end: usize = self.items.len;
@@ -1301,7 +1303,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
 
         fn trimRight(
             self: Self,
-            comptime opt: StringMode, comptime needle: Parameter(Self.DataType, opt), ) usize {
+            comptime opt: StringMode, 
+            comptime needle: Parameter(Self.DataType, opt),
+        ) usize {
             if (self.items.len <= 1) return 0;
             var end: usize = self.items.len;
             switch (opt) {
@@ -1959,7 +1963,7 @@ fn closingBracket(
     comptime braces: []const u8,
     comptime idx: usize,
 ) usize {
-    comptime var count: isize = @intFromBool(sq[idx].s.char == braces[0]);
+    comptime var count: isize = @intFromBool(sq[idx].s.char == braces[0] and !sq[idx].s.escaped);
 
     if (comptime count == 0) {
         @compileError("closingBracket: must start on opening brace");
@@ -1983,7 +1987,7 @@ fn closingBracketEscaped(
     comptime braces: []const u8,
     comptime idx: usize,
 ) usize {
-    comptime var count: isize = @intFromBool(es[idx].char == braces[0]);
+    comptime var count: isize = @intFromBool(es[idx].char == braces[0] and !es[idx].escaped);
 
     if (comptime count == 0) {
         @compileError("closingBracket: must start on opening brace");
@@ -2006,10 +2010,10 @@ fn pipeSearch(
         switch (sq[i]) {
             .s => |s| switch (s.char) {
                 '|' => if (s.escaped) continue else return i,
-                '(' => i = closingBracket(sq, "()", i),
-                '[' => i = closingBracket(sq, "[]", i),
-                '{' => i = closingBracket(sq, "{}", i),
-                ')', ']', '}' => @compileError("pipeSearch: invalid braces"),
+                '(' => if (s.escaped) continue else { i = closingBracket(sq, "()", i); },
+                '[' => if (s.escaped) continue else { i = closingBracket(sq, "[]", i); },
+                '{' => if (s.escaped) continue else { i = closingBracket(sq, "{}", i); },
+                ')', ']', '}' => if (!s.escaped) @compileError("pipeSearch: invalid braces"),
                 else => continue,
             },
             else => continue,
