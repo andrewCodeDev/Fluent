@@ -2261,7 +2261,7 @@ fn invertRegex(
     }
 }
 
-fn equalRegexx(
+fn equalRegex(
     comptime char: u8,
 ) fn (u8) bool {
     return struct {
@@ -2414,7 +2414,7 @@ fn ParseRegexTreeDepth(
                 }
 
                 // default to direct equals
-                break :outer RegexUnit(invertRegex(true, s.negated, equalRegexx(s.char)), q);
+                break :outer RegexUnit(invertRegex(true, s.negated, equalRegex(s.char)), q);
             },
             .q => @compileError("ParseRegexTreeRecursive: head quantifier"),
         };
