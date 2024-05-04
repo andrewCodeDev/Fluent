@@ -49,6 +49,7 @@ fn FluentInterface(comptime T: type) type {
 // Public Fluent Iterator Access Point                                      ////
 ////////////////////////////////////////////////////////////////////////////////
 
+/// enum {forward, reverse}
 pub const IteratorMode = enum { forward, reverse };
 
 pub fn BaseIterator(comptime T: type, mode: IteratorMode) type {
@@ -109,6 +110,7 @@ pub fn MatchIterator(
     };
 }
 
+/// match - match substrings based on an expression
 pub fn match(
     comptime expression: []const u8,
     source: []const u8,
@@ -141,6 +143,7 @@ fn SplitIterator(comptime expression: []const u8) type {
     };
 }
 
+/// split - splits a string based on a delimiting expression
 pub fn split(
     comptime expression: []const u8,
     source: []const u8,
@@ -312,6 +315,7 @@ fn IteratorInterface(
             return null;
         }
 
+        /// strided - set iterator stride (default 1)
         pub fn strided(
             self: Self,
             stride_size: usize,
@@ -323,6 +327,7 @@ fn IteratorInterface(
             };
         }
 
+        /// window - return a slice and advance by stride
         pub fn window(
             self: *Self,
             window_size: usize,
@@ -344,6 +349,7 @@ fn IteratorInterface(
             return null;
         }
 
+        /// map - transforms every elment in the acquired slice with a given unary function
         pub fn map(
             self: Self,
             comptime new_transforms: anytype,
@@ -355,6 +361,7 @@ fn IteratorInterface(
             };
         }
 
+        /// filter - acquire a unary predicate or a tuple of unary predicates
         pub fn filter(
             self: Self,
             comptime new_filters: anytype,
@@ -407,22 +414,26 @@ fn IteratorInterface(
 
 pub fn GeneralImmutableBackend(comptime Self: type) type {
     return struct {
+        /// all - check if all elements of the acquired slice are true by given predicate
         pub fn all(self: Self, predicate: fn (Self.DataType) bool) bool {
             return for (self.items) |x| {
                 if (!predicate(x)) break false;
             } else true;
         }
 
+        /// none - check if no elements of the acquired slice are true by given predicate
         pub fn none(self: Self, predicate: fn (Self.DataType) bool) bool {
             return for (self.items) |x| {
                 if (predicate(x)) break false;
             } else true;
         }
 
+        /// getAt - returns an element for given positive or negative index
         pub fn getAt(self: Self, idx: anytype) Self.DataType {
             return self.items[wrapIndex(self.items.len, idx)];
         }
 
+        /// slice - chainable slicing operation for acquired slice
         pub fn slice(self: Self, i: anytype, j: anytype) Self {
             const I = @TypeOf(i);
             const J = @TypeOf(j);
@@ -453,27 +464,37 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
         //  obvious that we're support any kind of slice and
         //  both Mutable and Immutable backends.
 
+        ///order - returns the lexicographical order compared to a given slice
         pub fn order(self: Self, items: []const Self.DataType) Order {
             return std.mem.order(Self.DataType, self.items, items);
         }
+
+        /// equal - returns true if lexicogrpahical order is equal to a given slice
         pub fn equal(self: Self, items: []const Self.DataType) bool {
             return order(self, items) == .eq;
         }
 
+        /// sum - returns the sum of all elements or zero if slice is empty
         pub fn sum(self: Self) Self.DataType {
             return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Add, add, self.items, reduceInit(ReduceOp.Add, Self.DataType) });
         }
+
+        /// product - returns the product of all elements or zero if slice is empty
         pub fn product(self: Self) Self.DataType {
             return @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Mul, mul, self.items, reduceInit(ReduceOp.Mul, Self.DataType) });
         }
 
+        /// min - returns an optional minimum value from the acquired slice
         pub fn min(self: Self) ?Self.DataType {
             return if (self.items.len == 0) null else @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Min, Fluent.min, self.items, reduceInit(ReduceOp.Min, Self.DataType) });
         }
+
+        /// max - returns an optional maximum value from the acquired slice
         pub fn max(self: Self) ?Self.DataType {
             return if (self.items.len == 0) null else @call(.always_inline, simdReduce, .{ Self.DataType, ReduceOp.Max, Fluent.max, self.items, reduceInit(ReduceOp.Max, Self.DataType) });
         }
 
+        /// write - writes the acquired slice to a given buffer
         pub fn write(self: Self, out_buffer: []Self.DataType) Self {
             if (self.items.len == 0) return self;
             std.debug.assert(self.items.len < out_buffer.len);
@@ -481,6 +502,8 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             return (self);
         }
 
+        
+        /// print - prints the acquired slice based on a given format string
         pub fn print(self: Self, comptime format: []const u8) Self {
             // this is intended to work similarly to std.log.info
             const stderr = std.io.getStdErr();
@@ -492,6 +515,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             return self;
         }
 
+        /// sample - randomly samples a range from the acquired slice given a size
         pub fn sample(self: Self, random: std.Random, size: usize) []const Self.DataType {
             std.debug.assert(size <= self.items.len);
 
@@ -503,6 +527,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             return self.items[start..][0..size];
         }
 
+        /// reduce - returns a reduction based on an intial value and binary function
         pub fn reduce(
             self: Self,
             comptime reduce_type: type,
@@ -516,6 +541,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             return rdx;
         }
 
+        /// mapReduce - applies unary function and reduces on intial value and binary function
         pub fn mapReduce(
             self: Self,
             comptime reduce_type: type,
@@ -536,6 +562,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             return rdx;
         }
 
+        /// concat - appends the aquired slice to a given slice into a given buffer
         pub fn concat(
             self: Self,
             items: []const Self.DataType,
@@ -548,6 +575,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             return .{ .items = concat_buffer[0..concat_index] };
         }
 
+        /// join - appends the aquired slice to a given range of slices into a given buffer
         pub fn join(
             self: Self,
             collection: []const []const Self.DataType,
@@ -584,6 +612,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
         //  PUBLIC SECTION   //
         ///////////////////////
 
+        /// findFrom - returns first index after a given position of scalar, slice, or any
         pub fn findFrom(
             self: Self,
             comptime mode: FluentMode,
@@ -597,6 +626,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             };
         }
 
+        /// containsFrom - check if contains a given scalar, sequence, or any after a given index
         pub fn containsFrom(
             self: Self,
             comptime mode: FluentMode,
@@ -606,6 +636,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             return findFrom(self, mode, start_index, needle) != null;
         }
 
+        /// find - returns first index of scalar, slice, or any
         pub fn find(
             self: Self,
             comptime mode: FluentMode,
@@ -614,6 +645,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             return findFrom(self, mode, 0, needle);
         }
 
+        /// contains - check if contains a given scalar, sequence, or any
         pub fn contains(
             self: Self,
             comptime mode: FluentMode,
@@ -622,6 +654,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             return find(self, mode, needle) != null;
         }
 
+        /// startsWith  - checks if the acquired slice starts with a scalar, sequence, or any
         pub fn startsWith(
             self: Self,
             comptime mode: FluentMode,
@@ -641,6 +674,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             };
         }
 
+        /// endsWith - checks if the acquired slice ends with a scalar, sequence, or any
         pub fn endsWith(
             self: Self,
             comptime mode: FluentMode,
@@ -660,6 +694,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             };
         }
 
+        /// count - counts all, left, right given a scalar, sequence, or any
         pub fn count(
             self: Self, 
             direction: DirectionOption, 
@@ -675,6 +710,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             };
         }
 
+        /// trim - trims left, right, or all based on any, sequence, or scalar
         pub fn trim(
             self: Self,
             comptime direction: DirectionOption,
@@ -844,6 +880,7 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
         // includes operations like reduce, find, and iterators
         pub usingnamespace GeneralImmutableBackend(Self);
 
+        /// sort - sorts the range in ascending or descending order
         pub fn sort(self: Self, comptime direction: SortDirection) Self {
             const func = if (direction == .ascending)
                 std.sort.asc(Self.DataType)
@@ -854,17 +891,20 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
             return self;
         }
 
+        /// fill - fills the acquired slice with a scalar value
         pub fn fill(self: Self, scalar: Self.DataType) Self {
             @memset(self.items, scalar);
             return self;
         }
 
+        /// copy - copy a given slice into the acquired slice
         pub fn copy(self: Self, items: []const Self.DataType) Self {
             std.debug.assert(self.items.len >= items.len);
             @memcpy(self.items[0..items.len], items);
             return .{ .items = self.items[0..items.len] };
         }
 
+        /// rotate - rotates the array by both negative and positive amounts
         pub fn rotate(self: Self, amount: anytype) Self {
             const len = self.items.len;
 
@@ -881,16 +921,19 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
             return self;
         }
 
+        /// reverse - reverses the acquired slice
         pub fn reverse(self: Self) Self {
             std.mem.reverse(Self.DataType, self.items);
             return (self);
         }
 
+        /// setAt - sets a given position with a provided value using index wrapping
         pub fn setAt(self: Self, idx: anytype, item: Self.DataType) Self {
             self.items[wrapIndex(self.items.len, idx)] = item;
             return self;
         }
 
+        /// map - transforms every elment in the acquired slice with a given unary function
         pub fn map(self: Self, unary_func: anytype) Self {
             const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
                 unary_func
@@ -901,7 +944,8 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
             return self;
         }
 
-        fn shuffle(self: Self, random: std.Random) Self {
+        /// shuffle - randomly shuffles the acquired slice
+        pub fn shuffle(self: Self, random: std.Random) Self {
             random.shuffle(Self.DataType, self.items);
             return self;
         }
@@ -940,42 +984,52 @@ fn ImmutableStringBackend(comptime Self: type) type {
         //  PUBLIC SECTION   //
         ///////////////////////
 
+        /// isDigit - returns true for [0-9]+
         pub fn isDigit(self: Self) bool {
             return self.all(std.ascii.isDigit);
         }
 
+        /// isAlpha - returns true for [a-zA-z]+
         pub fn isAlpha(self: Self) bool {
             return self.all(std.ascii.isAlphabetic);
         }
 
+        /// isSpaces - returns true for [\s]+
         pub fn isSpaces(self: Self) bool {
             return self.all(std.ascii.isWhitespace);
         }
 
+        /// isLower - returns true for lowercase letters
         pub fn isLower(self: Self) bool {
             return self.all(std.ascii.isLower);
         }
 
+        /// isUpper - returns true for uppercase letters
         pub fn isUpper(self: Self) bool {
             return self.all(std.ascii.isUpper);
         }
 
+        /// isHex - returns true for hexadecimal characters [0-9a-fA-F]
         pub fn isHex(self: Self) bool {
             return self.all(std.ascii.isHex);
         }
 
+        /// isASCII - returns true for ASCII characters
         pub fn isASCII(self: Self) bool {
             return self.all(std.ascii.isASCII);
         }
 
+        /// isPrintable - returns true for printable ASCII characters
         pub fn isPrintable(self: Self) bool {
             return self.all(std.ascii.isPrint);
         }
 
+        /// isAlnum - returns true for alphanumeric characters [a-zA-Z0-9]
         pub fn isAlnum(self: Self) bool {
             return self.all(std.ascii.isAlphanumeric);
         }
 
+        /// digit - parses the string as an integer in base 10
         pub fn digit(self: Self, comptime T: type) !T {
             if (comptime !isInteger(T))
                 @compileError("digit: requires integer type.");
@@ -983,6 +1037,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return std.fmt.parseInt(T, self.items, 10);
         }
 
+        /// float - parses the string as a floating-point number
         pub fn float(self: Self, comptime T: type) !T {
             if (comptime !isFloat(T))
                 @compileError("float: requires floating-point type.");
@@ -990,6 +1045,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return std.fmt.parseFloat(T, self.items);
         }
 
+        /// findFrom - returns first index after a given position of scalar, slice, or any
         pub fn findFrom(
             self: Self,
             comptime mode: StringMode,
@@ -1006,6 +1062,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             };
         }
 
+        /// containsFrom - check if contains a given scalar, sequence, or any after a given index
         pub fn containsFrom(
             self: Self,
             comptime mode: StringMode,
@@ -1015,6 +1072,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return findFrom(self, mode, start_index, needle) != null;
         }
 
+        /// find - returns first index of scalar, slice, or any
         pub fn find(
             self: Self,
             comptime mode: StringMode,
@@ -1023,6 +1081,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return findFrom(self, mode, 0, needle);
         }
 
+        /// contains - check if contains a given scalar, sequence, or any
         pub fn contains(
             self: Self,
             comptime mode: StringMode,
@@ -1031,6 +1090,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return find(self, mode, needle) != null;
         }
 
+        /// trim - trims left, right, or all based on any, sequence, or scalar
         pub fn trim(
             self: Self,
             comptime direction: DirectionOption,
@@ -1048,6 +1108,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return .{ .items = if (head < tail) self.items[head..tail] else self.items[0..0] };
         }
 
+        /// count - counts all, left, right given a scalar, sequence, or any
         pub fn count(
             self: Self,
             comptime direction: DirectionOption,
@@ -1064,6 +1125,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
+        /// split - splits a string based on a delimiting expression
         pub fn split(
             self: Self,
             comptime delimiter: []const u8,
@@ -1071,6 +1133,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return Fluent.split(delimiter, self.items);
         }
 
+        /// match - match substrings based on an expression
         pub fn match(
             self: Self,
             comptime delimiter: []const u8,
@@ -1078,6 +1141,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return Fluent.match(delimiter, self.items);
         }
 
+        /// differenceWith - returns set diference between acquired slice and given slice
         pub fn differenceWith(
             self: Self,
             string: []const u8,
@@ -1096,6 +1160,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return .{ .items = items_set.differenceWith(string_set).fillBuffer(diff_buffer) };
         }
 
+        /// unionWith - returns set union between acquired slice and given slice
         pub fn unionWith(
             self: Self,
             string: []const u8,
@@ -1114,6 +1179,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return .{ .items = items_set.unionWith(string_set).fillBuffer(union_buffer) };
         }
 
+        /// intersectWith - returns set intersection between acquired slice and given slice
         pub fn intersectWith(
             self: Self,
             string: []const u8,
@@ -1274,16 +1340,19 @@ fn MutableStringBackend(comptime Self: type) type {
 
         pub usingnamespace GeneralMutableBackend(Self);
 
+        /// lower - transform all alphabetic characters to lower case
         pub fn lower(self: Self) Self {
             for (self.items) |*c| c.* = std.ascii.toLower(c.*);
             return self;
         }
 
+        /// upper - transform all alphabetic characters to upper case
         pub fn upper(self: Self) Self {
             for (self.items) |*c| c.* = std.ascii.toUpper(c.*);
             return self;
         }
 
+        /// capitalize - transform first character to upper case and rest to lower case
         pub fn capitalize(self: Self) Self {
             if (self.items.len > 0)
                 self.items[0] = std.ascii.toUpper(self.items[0]);
@@ -1294,6 +1363,7 @@ fn MutableStringBackend(comptime Self: type) type {
             return self;
         }
 
+        /// title - capitalize each sequence separated by spaces
         pub fn title(self: Self) Self {
             var i: usize = 0;
             var prev: u8 = ' ';
@@ -1330,6 +1400,7 @@ const StringBitSet = struct {
 
     bits: [4]BackingSet,
 
+    /// init - returns an initEmpty instance of StringBitSet
     pub fn init() StringBitSet {
         return .{ .bits = .{
             BackingSet.initEmpty(),
@@ -1339,6 +1410,7 @@ const StringBitSet = struct {
         } };
     }
 
+    /// setValue - sets the value of the bit at the specified position
     pub fn setValue(self: *StringBitSet, pos: usize, value: bool) void {
         const mod_pos = pos & 63;
         switch (pos) {
@@ -1349,6 +1421,8 @@ const StringBitSet = struct {
             else => unreachable,
         }
     }
+
+    /// isSet - checks if the bit at the specified position is set
     pub fn isSet(self: *const StringBitSet, pos: usize) bool {
         const mod_pos = pos & 63;
         return switch (pos) {
@@ -1359,6 +1433,8 @@ const StringBitSet = struct {
             else => unreachable,
         };
     }
+
+    /// unionWith - computes the union of two StringBitSets
     pub fn unionWith(self: StringBitSet, other: StringBitSet) StringBitSet {
         return .{ .bits = .{
             self.bits[0].unionWith(other.bits[0]),
@@ -1367,6 +1443,8 @@ const StringBitSet = struct {
             self.bits[3].unionWith(other.bits[3]),
         } };
     }
+
+    /// differenceWith - computes the difference of two StringBitSets
     pub fn differenceWith(self: StringBitSet, other: StringBitSet) StringBitSet {
         return .{ .bits = .{
             self.bits[0].differenceWith(other.bits[0]),
@@ -1375,6 +1453,8 @@ const StringBitSet = struct {
             self.bits[3].differenceWith(other.bits[3]),
         } };
     }
+
+    /// intersectWith - computes the intersection of two StringBitSets
     pub fn intersectWith(self: StringBitSet, other: StringBitSet) StringBitSet {
         return .{ .bits = .{
             self.bits[0].intersectWith(other.bits[0]),
@@ -1384,10 +1464,12 @@ const StringBitSet = struct {
         } };
     }
 
+    /// count - counts the number of set bits in the StringBitSet
     pub fn count(self: StringBitSet) usize {
         return self.bits[0].count() + self.bits[1].count() + self.bits[2].count() + self.bits[3].count();
     }
 
+    /// fillBuffer - fills a buffer with the values of set bits in the StringBitSet
     pub fn fillBuffer(self: *const StringBitSet, buffer: []u8) []u8 {
         var val: usize = 0;
         var pos: usize = 0;
