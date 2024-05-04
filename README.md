@@ -127,7 +127,6 @@ Mutable:
 copy          - copy a given slice into the acquired slice
 fill          - fills the acquired slice with a scalar value
 map           - transforms every elment in the acquired slice with a given unary function
-replace       - replaces slice, sequence, or any at left, right, periphery or all
 reverse       - reverses the acquired slice
 rotate        - rotates the array by both negative and positive amounts
 setAt         - sets a given position with a provided value using index wrapping
