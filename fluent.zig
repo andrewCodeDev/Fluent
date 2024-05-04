@@ -158,7 +158,7 @@ pub fn split(
 //////////////////////////////////////////////////////////////////////
 // chain: combine multiple unary functions into a single in-order call
 
-pub fn chain(
+pub fn Chain(
     comptime unary_tuple: anytype,
 ) type {
     return struct {
@@ -190,7 +190,7 @@ else
 pub fn bind(
     comptime bind_tuple: anytype,
     comptime function: anytype,
-) bindReturn(bind_tuple, function) {
+) BindRetun(bind_tuple, function) {
     const bind_count = comptime tupleSize(bind_tuple);
     const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
 
@@ -209,8 +209,11 @@ pub fn bind(
     }
 }
 
-fn bindReturn(
+fn BindRetun(
     comptime bind_tuple: anytype,
+
+
+
     comptime function: anytype,
 ) type {
     const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
@@ -296,7 +299,7 @@ fn IteratorInterface(
             const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .Fn)
                 transforms
             else
-                Fluent.chain(transforms).call;
+                Fluent.Chain(transforms).call;
 
             switch (comptime Mode) {
                 .forward => {
@@ -552,7 +555,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
                 unary_func
             else
-                chain(unary_func).call;
+                Chain(unary_func).call;
 
             var rdx = initial;
             for (self.items) |x| {
@@ -938,7 +941,7 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
             const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
                 unary_func
             else
-                chain(unary_func).call;
+                Chain(unary_func).call;
 
             for (self.items) |*x| x.* = @call(.always_inline, unary_call, .{x.*});
             return self;
@@ -2240,7 +2243,7 @@ fn ParseRegexTreeBreadth(
     }
 }
 
-fn InvertRegex(
+fn invertRegex(
     typical: bool, // what is the function typically?
     inverse: bool, // what does the circumstance indicate?
     function: fn (u8) bool,
@@ -2258,7 +2261,7 @@ fn InvertRegex(
     }
 }
 
-fn EqualRegex(
+fn equalRegexx(
     comptime char: u8,
 ) fn (u8) bool {
     return struct {
@@ -2269,7 +2272,7 @@ fn EqualRegex(
 }
 
 
-fn SpanRegex(
+fn spanRegex(
     comptime a: u8,
     comptime b: u8,
 ) fn (u8) bool {
@@ -2366,7 +2369,7 @@ fn ParseRegexTreeDepth(
                     const u = _sq[2].s;
                     if (t.char == '-' and !t.escaped and u.in_square) {
                         _sq = _sq[3..];
-                        break :outer RegexUnit(InvertRegex(true, s.negated, SpanRegex(s.char, u.char)), null);
+                        break :outer RegexUnit(invertRegex(true, s.negated, spanRegex(s.char, u.char)), null);
                     }
                 }
 
@@ -2383,16 +2386,16 @@ fn ParseRegexTreeDepth(
 
                 if (s.escaped) {
                     switch (s.char) {
-                        'w' => break :outer RegexUnit(InvertRegex(true, s.negated, isWordCharacter), q),
-                        'W' => break :outer RegexUnit(InvertRegex(false, s.negated, isWordCharacter), q),
-                        'd' => break :outer RegexUnit(InvertRegex(true, s.negated, std.ascii.isDigit), q),
-                        'D' => break :outer RegexUnit(InvertRegex(false, s.negated, std.ascii.isDigit), q),
-                        's' => break :outer RegexUnit(InvertRegex(true, s.negated, std.ascii.isWhitespace), q),
-                        'S' => break :outer RegexUnit(InvertRegex(false, s.negated, std.ascii.isWhitespace), q),
-                        'h' => break :outer RegexUnit(InvertRegex(true, s.negated, isHorizontalWhitespace), q),
-                        'H' => break :outer RegexUnit(InvertRegex(false, s.negated, isHorizontalWhitespace), q),
-                        'v' => break :outer RegexUnit(InvertRegex(true, s.negated, isVerticalWhitespace), q),
-                        'V' => break :outer RegexUnit(InvertRegex(false, s.negated, isVerticalWhitespace), q),
+                        'w' => break :outer RegexUnit(invertRegex(true, s.negated, isWordCharacter), q),
+                        'W' => break :outer RegexUnit(invertRegex(false, s.negated, isWordCharacter), q),
+                        'd' => break :outer RegexUnit(invertRegex(true, s.negated, std.ascii.isDigit), q),
+                        'D' => break :outer RegexUnit(invertRegex(false, s.negated, std.ascii.isDigit), q),
+                        's' => break :outer RegexUnit(invertRegex(true, s.negated, std.ascii.isWhitespace), q),
+                        'S' => break :outer RegexUnit(invertRegex(false, s.negated, std.ascii.isWhitespace), q),
+                        'h' => break :outer RegexUnit(invertRegex(true, s.negated, isHorizontalWhitespace), q),
+                        'H' => break :outer RegexUnit(invertRegex(false, s.negated, isHorizontalWhitespace), q),
+                        'v' => break :outer RegexUnit(invertRegex(true, s.negated, isVerticalWhitespace), q),
+                        'V' => break :outer RegexUnit(invertRegex(false, s.negated, isVerticalWhitespace), q),
                         else => {},
                     }
                 } else {
@@ -2411,7 +2414,7 @@ fn ParseRegexTreeDepth(
                 }
 
                 // default to direct equals
-                break :outer RegexUnit(InvertRegex(true, s.negated, EqualRegex(s.char)), q);
+                break :outer RegexUnit(invertRegex(true, s.negated, equalRegexx(s.char)), q);
             },
             .q => @compileError("ParseRegexTreeRecursive: head quantifier"),
         };
