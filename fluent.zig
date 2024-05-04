@@ -660,31 +660,37 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             };
         }
 
-        /// supported opt = {all, leading, trailing, until, periphery, inside, inverse}
-        pub fn count(self: Self, opt: CountOption, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
+        /// supported opt = {all, head, tail, until, periphery, inside, inverse}
+        pub fn count(
+            self: Self, 
+            direction: DirectionOption, 
+            comptime mode: FluentMode,
+            needle: Parameter(Self.DataType, mode),
+        ) usize {
             if (self.items.len == 0) return 0;
 
-            return switch (opt) {
+            return switch (direction) {
                 .all => countAll(self, mode, needle),
-                .leading => countLeading(self, mode, needle),
-                .trailing => countTrailing(self, mode, needle),
-                .periphery => countLeading(self, mode, needle) + countTrailing(self, mode, needle),
-                .until => countUntil(self, mode, needle),
-                .inside => countAll(self, mode, needle) - (countLeading(self, mode, needle) + countTrailing(self, mode, needle)),
-                .inverse => self.items.len - countAll(self, mode, needle),
+                .left => countLeft(self, mode, needle),
+                .right => countRight(self, mode, needle),
             };
         }
 
         pub fn trim(
             self: Self,
             comptime direction: DirectionOption,
-            comptime opt: TrimOptions,
-            actor: Parameter(Self.DataType, opt),
+            comptime option: TrimOptions,
+            actor: Parameter(Self.DataType, option),
         ) Self {
             if (self.items.len <= 1) return self;
-            const start: usize = if (direction == .left or direction == .periphery) trimLeft(self, opt, actor) else 0;
-            const end: usize = if (direction == .right or direction == .periphery) trimRight(self, opt, actor) else self.items.len;
-            return .{ .items = self.items[start..end] };
+
+            const head: usize = if (direction == .left or direction == .all) 
+                trimLeft(self, option, actor) else 0;
+
+            const tail: usize = if (direction == .right or direction == .all)
+                trimRight(self, option, actor) else self.items.len;
+
+            return .{ .items = if (head < tail) self.items[head..tail] else self.items[0..0] };
         }
 
         ///////////////////////////////////////////////////
@@ -695,14 +701,6 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             comptime mode: std.mem.DelimiterType,
             delimiter: Parameter(Self.DataType, mode),
         ) std.mem.SplitIterator(Self.DataType, mode) {
-            return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
-        }
-
-        pub fn tokenize(
-            self: Self,
-            comptime mode: std.mem.DelimiterType,
-            delimiter: Parameter(Self.DataType, mode),
-        ) std.mem.TokenIterator(Self.DataType, mode) {
             return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
         }
 
@@ -728,7 +726,11 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             return start;
         }
 
-        fn trimRight(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
+        fn trimRight(
+            self: Self,
+            comptime opt: TrimOptions,
+            actor: Parameter(Self.DataType, opt),
+        ) usize {
             if (self.items.len <= 1) return 0;
             const start: usize = 0;
             var end: usize = self.items.len;
@@ -747,28 +749,32 @@ fn ImmutableNumericBackend(comptime Self: type) type {
         }
 
         /// count the occurence of needles in self.items returns 0 if no match is found
-        fn countAll(self: Self, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
+        fn countAll(
+            self: Self,
+            comptime mode: FluentMode,
+            needle: Parameter(Self.DataType, mode),
+        ) usize {
             var result: usize = 0;
 
             switch (mode) {
                 .scalar => {
-                    for (self.items) |it| {
-                        if (it == needle) result += 1;
-                    }
+                    for (self.items) |it| { if (it == needle) result += 1; }
                 },
                 .sequence => result = std.mem.count(Self.DataType, self.items, needle),
                 .any => {
                     for (self.items) |it| {
-                        for (needle) |n| {
-                            if (it == n) result += 1;
-                        }
+                        for (needle) |n| { if (it == n) result += 1; }
                     }
                 },
             }
             return (result);
         }
 
-        fn countLeading(self: Self, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
+        fn countLeft(
+            self: Self,
+            comptime mode: FluentMode,
+            needle: Parameter(Self.DataType, mode),
+        ) usize {
             var result: usize = 0;
             switch (mode) {
                 .scalar => {
@@ -792,37 +798,16 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             return (result);
         }
 
-        fn countUntil(self: Self, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
+        fn countRight(
+            self: Self,
+            comptime mode: FluentMode,
+            needle: Parameter(Self.DataType, mode),
+        ) usize {
             var result: usize = 0;
             switch (mode) {
                 .scalar => {
-                    for (self.items, 0..) |it, i| {
-                        if (it == needle) return (i);
-                    }
-                },
-                .sequence => {
-                    if (self.items.len < needle.len) return (0);
-                    var win_iter = std.mem.window(Self.DataType, self.items, needle.len, needle.len);
-                    while (win_iter.next()) |win| : (result += 1) {
-                        if (std.mem.eql(Self.DataType, win, needle) == true) break;
-                    }
-                },
-                .any => {
-                    for (self.items) |it| {
-                        if (std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{it}) == true) break;
-                        result += 1;
-                    }
-                },
-            }
-            return (result);
-        }
-
-        fn countTrailing(self: Self, comptime mode: FluentMode, needle: Parameter(Self.DataType, mode)) usize {
-            var result: usize = 0;
-            var rev_iter = std.mem.reverseIterator(self.items);
-            switch (mode) {
-                .scalar => {
-                    while (rev_iter.next()) |item| : (result += 1) {
+                    var itr = Fluent.iterator(.reverse, self.items);
+                    while (itr.next()) |item| : (result += 1) {
                         if (item != needle) break;
                     }
                 },
@@ -831,17 +816,18 @@ fn ImmutableNumericBackend(comptime Self: type) type {
                     var start = self.items.len - needle.len;
                     while (start != 0) : (start -|= needle.len) {
                         const win = self.items[start .. start + needle.len];
-                        if (std.mem.eql(Self.DataType, win, needle) == false) break;
+                        if (!std.mem.eql(Self.DataType, win, needle)) break;
                         result += 1;
                     }
                 },
                 .any => {
-                    while (rev_iter.next()) |item| : (result += 1) {
-                        if (std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{item}) == false) break;
+                    var itr = Fluent.iterator(.reverse, self.items);
+                    while (itr.next()) |item| : (result += 1) {
+                        if (!std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{item})) break;
                     }
                 },
             }
-            return (result);
+            return result;
         }
     };
 }
@@ -858,7 +844,7 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
     return struct {
 
         // includes operations like reduce, find, and iterators
-        pub usingnamespace ImmutableNumericBackend(Self);
+        pub usingnamespace GeneralImmutableBackend(Self);
 
         pub fn sort(self: Self, comptime direction: SortDirection) Self {
             const func = if (direction == .ascending)
@@ -1098,6 +1084,7 @@ const StringMode = enum { regex, scalar };
 
 fn ImmutableStringBackend(comptime Self: type) type {
     return struct {
+
         pub usingnamespace GeneralImmutableBackend(Self);
 
         ///////////////////////
@@ -1158,7 +1145,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             self: Self,
             comptime mode: StringMode,
             start_index: usize,
-            comptime needle: Parameter(Self.DataType, mode),
+            comptime needle: Parameter(u8, mode),
         ) ?usize {
             return switch (mode) {
                 .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
@@ -1174,7 +1161,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             self: Self,
             comptime mode: StringMode,
             start_index: usize,
-            comptime needle: Parameter(Self.DataType, mode),
+            comptime needle: Parameter(u8, mode),
         ) bool {
             return findFrom(self, mode, start_index, needle) != null;
         }
@@ -1182,7 +1169,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
         pub fn find(
             self: Self,
             comptime mode: StringMode,
-            comptime needle: Parameter(Self.DataType, mode),
+            comptime needle: Parameter(u8, mode),
         ) ?usize {
             return findFrom(self, mode, 0, needle);
         }
@@ -1190,7 +1177,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
         pub fn contains(
             self: Self,
             comptime mode: StringMode,
-            comptime needle: Parameter(Self.DataType, mode),
+            comptime needle: Parameter(u8, mode),
         ) bool {
             return find(self, mode, needle) != null;
         }
@@ -1199,32 +1186,54 @@ fn ImmutableStringBackend(comptime Self: type) type {
             self: Self,
             comptime direction: DirectionOption,
             comptime mode: StringMode,
-            comptime needle: Parameter(Self.DataType, mode),
+            comptime needle: Parameter(u8, mode),
         ) Self {
             if (self.items.len <= 1) return self;
-            const start: usize = if (direction == .left or direction == .periphery) trimLeft(self, mode, needle) else 0;
-            const end: usize = if (direction == .right or direction == .periphery) trimRight(self, mode, needle) else self.items.len;
-            return .{ .items = self.items[start..end] };
+
+            const head: usize = if (direction == .left or direction == .all) 
+                trimLeft(self, mode, needle) else 0;
+
+            const tail: usize = if (direction == .right or direction == .all) 
+                trimRight(self, mode, needle) else self.items.len;
+                
+            return .{ .items = if (head < tail) self.items[head..tail] else self.items[0..0] };
+        }
+
+        pub fn count(
+            self: Self,
+            comptime direction: DirectionOption,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            return switch (direction) {
+                .all => countAll(self, mode, needle),
+                .left => countLeft(self, mode, needle),
+                .right => countRight(self, mode, needle),
+            };
         }
 
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
 
-        pub fn split(self: Self, comptime mode: StringMode, comptime delimiter: Parameter(u8, mode)) switch (mode) {
-            .scalar => std.mem.SplitIterator(u8, .scalar),
-            .regex => Fluent.SplitIterator(delimiter),
-        } {
-            return switch (mode) {
-                .scalar => std.mem.SplitIterator(u8, .scalar){ .buffer = self.items, .index = 0, .delimiter = delimiter },
-                .regex => Fluent.split(delimiter, self.items),
-            };
+        pub fn split(
+            self: Self,
+            comptime delimiter: []const u8,
+        ) Fluent.SplitIterator(delimiter) {
+            return Fluent.split(delimiter, self.items);
+        }
+
+        pub fn match(
+            self: Self,
+            comptime delimiter: []const u8,
+        ) Fluent.SplitIterator(delimiter) {
+            return Fluent.match(delimiter, self.items);
         }
 
         pub fn differenceWith(
             self: Self,
             string: []const u8,
             diff_buffer: []u8,
-        ) FluentInterface([]Self.DataType) {
+        ) FluentInterface([]u8) {
             var items_set = StringBitSet.init();
             var string_set = StringBitSet.init();
 
@@ -1242,7 +1251,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             self: Self,
             string: []const u8,
             union_buffer: []u8,
-        ) FluentInterface([]Self.DataType) {
+        ) FluentInterface([]u8) {
             var items_set = StringBitSet.init();
             var string_set = StringBitSet.init();
 
@@ -1280,13 +1289,13 @@ fn ImmutableStringBackend(comptime Self: type) type {
 
         fn trimLeft(
             self: Self,
-            comptime opt: StringMode,
-            comptime needle: Parameter(Self.DataType, opt),
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
         ) usize {
             if (self.items.len <= 1) return 0;
             var start: usize = 0;
             const end: usize = self.items.len;
-            switch (opt) {
+            switch (mode) {
                 .scalar => {
                     while (start < end and self.items[start] == needle) start += 1;
                 },
@@ -1303,12 +1312,12 @@ fn ImmutableStringBackend(comptime Self: type) type {
 
         fn trimRight(
             self: Self,
-            comptime opt: StringMode, 
-            comptime needle: Parameter(Self.DataType, opt),
+            comptime mode: StringMode, 
+            comptime needle: Parameter(u8, mode),
         ) usize {
             if (self.items.len <= 1) return 0;
             var end: usize = self.items.len;
-            switch (opt) {
+            switch (mode) {
                 .scalar => {
                     while (end > 0 and self.items[end - 1] == needle) end -= 1;
                 },
@@ -1322,6 +1331,81 @@ fn ImmutableStringBackend(comptime Self: type) type {
             }
             return end;
         }
+
+        /// count the occurence of needles in self.items returns 0 if no match is found
+        fn countAll(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            var result: usize = 0;
+            switch (mode) {
+                .scalar => {
+                    for (self.items) |it| { if (it == needle) result += 1; }
+                },
+                .regex => {
+                    var itr = Fluent.match(needle, self.items);
+                    while (itr.next()) |_| { result += 1; }
+                }
+            }
+            return result;
+        }
+
+        fn countLeft(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            return switch (mode) {
+                .scalar => blk: {
+                    var index: usize = 0;
+                    while (index < self.items.len and self.items[index] == needle) { 
+                        index += 1;
+                    }
+                    break :blk index;
+                },
+                .regex => blk: {
+                    const tree = ParseRegexTree(needle);
+                    var index: usize = 0;
+                    var amount: usize = 0;
+                    while (tree.call(self.items, index, false)) |n| : (index += n) {
+                        amount += 1;
+                    }
+                    break :blk amount;
+                },
+            };
+        }
+
+        fn countRight(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            return switch (mode) {
+                .scalar => blk: {
+                    var index: usize = self.items.len;
+                    var amount: usize = 0;
+                    while (index >= 1) {
+                        index -= 1;
+                        if (needle != self.items[index]) break :blk amount;
+                        amount += 1;
+                    }
+                    break :blk amount;
+                },
+                .regex => blk: {
+                    const tree = ParseRegexTree(needle);
+                    var index: usize = 0;
+                    var amount: usize = 0;
+                    while (true) : ({ index += 1; amount = 0; }) {
+                        while (tree.call(self.items, index, false)) |n| : (index += n) {
+                            amount += 1;
+                        }
+                        if (index >= self.items.len) break :blk amount;
+                    }
+                },
+            };
+        }
+
     };
 }
 
@@ -1474,26 +1558,16 @@ const StringBitSet = struct {
 // ENUMERATED OPTIONS :                                                         //
 //////////////////////////////////////////////////////////////////////////////////
 
-const CountOption = enum {
+const DirectionOption = enum {
     all,
-    leading,
-    trailing,
-    until,
-    periphery,
-    inside,
-    inverse,
+    left,
+    right,
 };
 
 const ReplaceOption = enum {
     first,
     last,
     all,
-    periphery,
-};
-
-const DirectionOption = enum {
-    left,
-    right,
     periphery,
 };
 
@@ -1761,7 +1835,7 @@ fn parseQuantity(comptime escaped: []const RegexEscaped) usize {
             @compileError("parseQuantity: invalid char");
         }
         if (comptime i == 0 and escaped[i].char == '0' and escaped.len > 1) {
-            @compileError("parseQuantity: leading zero in integer");
+            @compileError("parseQuantity: head zero in integer");
         }
 
         const value = escaped[i].char - '0';
@@ -2076,7 +2150,6 @@ fn RegexAND(
                             while (count < b.start and idx < str.len) : (count += 1) {
                                 idx = lhs.call(str, idx, prev) orelse return null;
                             }
-
                             // idx < str.len can break above loop early
                             if (count < b.start) return null;
 
@@ -2117,10 +2190,8 @@ fn RegexAND(
                             last = rhs.call(str, idx, false) orelse last;
                             idx = lhs.call(str, idx, prev) orelse break;
                         }
-
                         return rhs.call(str, idx, i != idx) orelse last;
                     },
-
                     .exact => |n| {
                         var idx: usize = i;
                         for (0..n) |_| {
@@ -2128,7 +2199,6 @@ fn RegexAND(
                         }
                         return rhs.call(str, idx, true);
                     },
-
                     .between => |b| {
                         var idx: usize = i;
                         var count: usize = 0;
@@ -2149,7 +2219,6 @@ fn RegexAND(
                         // idx could have advanced - check again
                         return rhs.call(str, idx, (i != idx) or prev) orelse last;
                     },
-
                     .one_or_more => {
                         var idx: usize = lhs.call(str, i, prev) orelse return null;
 
@@ -2162,12 +2231,11 @@ fn RegexAND(
                         // at least one match above has occured
                         return rhs.call(str, idx, true) orelse last;
                     },
-
                     .optional => {
                         // a match hasn't occurred so we defer to previous
                         const j = lhs.call(str, i, prev) orelse return rhs.call(str, i, prev);
                         // a match must have occured so we switch to true
-                        return rhs.call(str, j, true) orelse rhs.call(str, i, true);
+                        return rhs.call(str, j, true) orelse rhs.call(str, i, prev);
                     },
                 }
             } else {
@@ -2417,7 +2485,7 @@ fn ParseRegexTreeDepth(
                 // default to direct equals
                 break :outer RegexUnit(InvertRegex(true, s.negated, EqualRegex(s.char)), q);
             },
-            .q => @compileError("ParseRegexTreeRecursive: leading quantifier"),
+            .q => @compileError("ParseRegexTreeRecursive: head quantifier"),
         };
 
         if (use_nand) {
@@ -2754,89 +2822,39 @@ test "getAt(self, idx)                         : scalar\n" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//test "count(self, opt, mode, needle)           : scalar" {
-//    const self = init("000_111_000");
-//
-//    {
-//        const result = self.count(.all, .scalar, '0');
-//        try expect(result == 6);
-//    }
-//
-//    {
-//        const result = self.count(.leading, .scalar, '0');
-//        try expect(result == 3);
-//    }
-//
-//    {
-//        const result = self.count(.trailing, .scalar, '0');
-//        try expect(result == 3);
-//    }
-//
-//    {
-//        const result = self.count(.until, .scalar, '1');
-//        try expect(result == 4);
-//    }
-//
-//    {
-//        const result = self.count(.periphery, .scalar, '0');
-//        try expect(result == 6);
-//    }
-//
-//    {
-//        const result = self.count(.inside, .scalar, '0');
-//        try expect(result == 0);
-//    }
-//
-//    {
-//        const result = self.count(.inverse, .scalar, '0');
-//        try expect(result == self.items.len - 6);
-//    }
-//    {
-//        // left and right are equal, should return length of array
-//        const result = init("0000000").count(.periphery, .scalar, '0');
-//        try expect(result == 7);
-//    }
-//}
-//
-//test "count(self, opt, mode, needle)           : sequence" {
-//    const self = init("000_111_000");
-//
-//    {
-//        const result = self.count(.all, .sequence, "000");
-//        try expect(result == 2);
-//    }
-//
-//    {
-//        const result = self.count(.leading, .sequence, "000");
-//        try expect(result == 1);
-//    }
-//
-//    {
-//        const result = self.count(.trailing, .sequence, "000");
-//        try expect(result == 1);
-//    }
-//
-//    {
-//        const result = self.count(.until, .sequence, "000");
-//        try expect(result == 0);
-//    }
-//
-//    {
-//        const result = self.count(.periphery, .sequence, "000");
-//        try expect(result == 2);
-//    }
-//
-//    {
-//        const result = self.count(.inside, .sequence, "111");
-//        try expect(result == 1);
-//    }
-//
-//    {
-//        const result = self.count(.inverse, .sequence, "000");
-//        try expect(result == self.items.len - 2);
-//    }
-//}
-//
+test "count(self, opt, mode, needle)           : scalar\n" {
+    const self = init("000_111_000");
+
+    {
+        const result = self.count(.all, .scalar, '0');
+        try std.testing.expectEqual(6, result);
+    }
+    {
+        const result = self.count(.left, .scalar, '0');
+        try std.testing.expectEqual(3, result);
+    }
+    {
+        const result = self.count(.right, .scalar, '0');
+        try std.testing.expectEqual(3, result);
+    }
+}
+
+test "count(self, opt, mode, needle)           : regex\n" {
+    const self = init("000_111_000");
+    {
+        const result = self.count(.all, .regex, "000");
+        try expect(result == 2);
+    }
+    {
+        const result = self.count(.left, .regex, "000");
+        try expect(result == 1);
+    }
+    {
+        const result = self.count(.right, .regex, "000");
+        try expect(result == 1);
+    }
+}
+
 //test "count(self, opt, mode, needle)           : any" {
 //    const self = init("000_111_000");
 //
@@ -2846,12 +2864,12 @@ test "getAt(self, idx)                         : scalar\n" {
 //    }
 //
 //    {
-//        const result = self.count(.leading, .any, "0_");
+//        const result = self.count(.head, .any, "0_");
 //        try expect(result == 4);
 //    }
 //
 //    {
-//        const result = self.count(.trailing, .any, "0_");
+//        const result = self.count(.tail, .any, "0_");
 //        try expect(result == 4);
 //    }
 //
@@ -3078,13 +3096,10 @@ test "max(self)                                : Self.DataType\n" {
 test "split(self, mode, delimiter)             : SplitIterator\n" {
     const self = init("This is a string");
     const expected = [_][]const u8{ "This", "is", "a", "string" };
-
-    {
-        var iter = self.split(.scalar, ' ');
-        for (expected) |item| {
-            const result = init(iter.next() orelse unreachable);
-            try expect(result.equal(item));
-        }
+    var iter = self.split(" ");
+    for (expected) |item| {
+        const result = init(iter.next() orelse unreachable);
+        try expect(result.equal(item));
     }
 }
 
@@ -3094,14 +3109,12 @@ test "split(self, mode, delimiter)             : SplitIterator\n" {
 
 test "isDigit(self)                            : bool\n" {
     const test_case = [_][]const u8{ "0", "0123456789", "oops!0123456789", "0123456789oops!" };
-    const expected = [_]bool{ true, true, false, false };
-
-    {
-        for (test_case, expected) |item, answer| {
-            const result = init(item).isDigit();
-            try expect(result == answer);
-        }
+    const expected = [_]bool{ true, true, false, false };  
+    for (test_case, expected) |item, answer| {
+        const result = init(item).isDigit();
+        try expect(result == answer);
     }
+    
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3273,7 +3286,7 @@ test "sort(self, opt)                          : MutSelf\n" {
             const result = init(buffer[0..])
                 .copy(case)
                 .sort(order);
-            try expect(result.equal(answer) == true);
+            try expect(result.equal(answer));
         }
     }
 }
@@ -3336,37 +3349,35 @@ test "join(self, collection, join_buffer)      : MutSelf\n" {
         const result = init(start_buffer[0..])
             .copy("0")
             .join(collection, join_buffer[0..]);
-        try expect(result.equal("011222333344444") == true);
+        try expect(result.equal("011222333344444"));
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//test "trim(self, opt, kind, actor)             : scalar" {
-//    const source = "     This is a string     ";
-//    var buffer: [source.len]u8 = undefined;
-//
-//    {
-//        const result = init(buffer[0..source.len])
-//            .copy(source)
-//            .trim(.left, .scalar, ' ');
-//        try expect(result.equal(source[5..]));
-//    }
-//
-//    {
-//        const result = init(buffer[0..source.len])
-//            .copy(source)
-//            .trim(.right, .scalar, ' ');
-//        try expect(result.equal(source[0 .. source.len - 5]));
-//    }
-//
-//    {
-//        const result = init(buffer[0..source.len])
-//            .copy(source)
-//            .trim(.periphery, .scalar, ' ');
-//        try expect(result.equal(source[5 .. source.len - 5]));
-//    }
-//}
+test "trim(self, opt, kind, actor)             : scalar\n" {
+    const source = "     This is a string     ";
+    var buffer: [source.len]u8 = undefined;
+
+    {
+        const result = init(buffer[0..source.len])
+            .copy(source)
+            .trim(.left, .scalar, ' ');
+        try expect(result.equal(source[5..]));
+    }
+    {
+        const result = init(buffer[0..source.len])
+            .copy(source)
+            .trim(.right, .scalar, ' ');
+        try expect(result.equal(source[0..source.len - 5]));
+    }
+    {
+        const result = init(buffer[0..source.len])
+            .copy(source)
+            .trim(.all, .scalar, ' ');
+        try expect(result.equal(source[5..source.len - 5]));
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -3377,7 +3388,7 @@ test "join(self, collection, join_buffer)      : MutSelf\n" {
 //    {
 //        const result = init(buffer[0..source.len])
 //            .copy(source)
-//            .trim(.left, .predicate, std.ascii.isWhitespace);
+//            .trim(.head, .predicate, std.ascii.isWhitespace);
 //        try expect(result.equal(source[5..]));
 //    }
 //
@@ -3398,32 +3409,28 @@ test "join(self, collection, join_buffer)      : MutSelf\n" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//test "trim(self, opt, kind, actor)             : set" {
-//    const source = "     This is a string     ";
-//    const set = " \n\t";
-//    var buffer: [source.len]u8 = undefined;
-//
-//    {
-//        const result = init(buffer[0..source.len])
-//            .copy(source)
-//            .trim(.left, .any, set[0..]);
-//        try expect(result.equal(source[5..]));
-//    }
-//
-//    {
-//        const result = init(buffer[0..source.len])
-//            .copy(source)
-//            .trim(.right, .any, set[0..]);
-//        try expect(result.equal(source[0 .. source.len - 5]));
-//    }
-//
-//    {
-//        const result = init(buffer[0..source.len])
-//            .copy(source)
-//            .trim(.periphery, .any, set[0..]);
-//        try expect(result.equal(source[5 .. source.len - 5]));
-//    }
-//}
+test "trim(self, opt, kind, actor)             : regex\n" {
+    const source = "     This is a string     ";
+    var buffer: [source.len]u8 = undefined;
+    {
+        const result = init(buffer[0..source.len])
+            .copy(source)
+            .trim(.left, .regex, "\\s+");
+        try expect(result.equal("This is a string     "));
+    }
+    {
+        const result = init(buffer[0..source.len])
+            .copy(source)
+            .trim(.right, .regex, "\\s+");
+        try expect(result.equal("     This is a string"));
+    }
+    {
+        const result = init(buffer[0..source.len])
+            .copy(source)
+            .trim(.all, .regex, "\\s+");
+        try expect(result.equal("This is a string"));
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -3437,14 +3444,12 @@ test "rotate(self, amount)                     : MutSelf\n" {
             .rotate(0);
         try expect(result.equal(string));
     }
-
     {
         const result = init(buffer[0..string.len])
             .copy(string)
             .rotate(1);
         try expect(result.equal("10011001"));
     }
-
     {
         const result = init(buffer[0..string.len])
             .copy(string)
@@ -3466,7 +3471,6 @@ test "reverse(self)                            : MutSelf\n" {
             .reverse();
         try expect(result.equal(string));
     }
-
     {
         const result = init(buffer[0..string.len])
             .copy(string)
@@ -4296,4 +4300,3 @@ test "regex-engine38                           : match iterator-> regex\n" {
         try std.testing.expect(itr.next() == null);
     }
 }
-
