@@ -2,6 +2,10 @@
 
 A fluent-interface for chaining algorithms, iterating, and performing REGEX over slices. 
 
+# Installation
+
+Fluent is a single file implementation. Add the `fluent.zig` file to your project and import like any standard utility.
+
 # Examples
 
 Use REGEX to find all substrings starting with a, b, or c followed by digits in a string:
@@ -35,10 +39,10 @@ const trimmed = Fluent.init(string).trim(.all, .regex, "[\\s.?!,]+");
 ```
 Concatenate, trim, and title string:
 ```Zig
-const result = Fluent.init(str_a)       // initialize our interface on str_a
-        .concat(str_b, buf[0..])        // concatenate str_b into buffer
-        .trim(.periphery, .scalar, ' ') // trim spaces on both sides
-        .title();                       // python title function
+const result = Fluent.init(str_a)   // initialize our interface on str_a
+        .concat(str_b, buf[0..])    // concatenate str_b into buffer
+        .trim(.left, .scalar, ' ')  // trim spaces on left side
+        .title();                   // python title function
 ```
 Fuse map-functions to calculate sigmoid to buffer:
 ```Zig
@@ -85,9 +89,70 @@ var itr = Fluent
 
 while (itr.next()) |value| { // ...
 ```
-# Installation
+# Fluent Explained
 
-Fluent is a single file implementation. Add the `fluent.zig` file to your project and import like any standard utility.
+### What makes it "fluent"?
+
+The fluent interface is a programming pattern that centers around method chaining.
+
+```Zig
+// without method-chaining...
+const y = trim(.all, x, " ");
+const z = sort(y, .asc);
+
+// with method-chaining...
+const y = x.trim(.all, " ").sort(.asc);
+```
+This pattern can encourage brevity and reduce intermediate variables.
+
+### Chainable and Terminal methods:
+
+There are two kinds of methods in fluent: Chainable and Terminal
+
+- Chainable methods return another fluent interface.
+- Terminal methods return various types such as usize
+
+Chainable methods include algorithms like sort, rotate, and map.
+
+Terminal methods include algorithms like count and max.
+
+### Function composition:
+
+To reduce the number of intermediate calls, fluent enables composing unary functions.
+
+Any method starting with the word `map` allows applying a function or a function tuple. This includes `map` and `mapReduce`.
+
+The iterator function `filter` applies filters sequentially to determine if an element will be returned by `next`.
+
+# Iterators (standard and REGEX)
+
+Fluent iterators come in Scalar and REGEX versions.
+
+Scalar iterators have the following characteristics:
+
+- Direction - can be forward or reverse.
+- Filters - a single (or tuple) of unary predicates to determine if an element will be included.
+- Transforms - a single (or tuple) of unary mapping functions applied to elements.
+- Stride - the distance an iterator steps on each iteration (default 1).
+
+These characteristics can be chained to construct a scalar iterator:
+
+```Zig
+// create an iterator with filters, transforms, and stride
+var itr = Fluent
+    .iterator(.forward, slice)
+    .map({
+        // ...
+    }).filter({
+        // ...
+    }).strided(N);
+```
+REGEX iterators take an expression and a string and return substrings.
+
+These iterators include:
+
+- Match - returns substrings that match an expression.
+- Split - splits a string based on an expression.
 
 # Algorithms
 

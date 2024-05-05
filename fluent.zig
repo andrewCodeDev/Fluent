@@ -847,7 +847,7 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
         pub usingnamespace GeneralImmutableBackend(Self);
 
         pub fn sort(self: Self, comptime direction: SortDirection) Self {
-            const func = if (direction == .ascending)
+            const func = if (direction == .asc)
                 std.sort.asc(Self.DataType)
             else
                 std.sort.desc(Self.DataType);
@@ -1578,8 +1578,8 @@ const TrimOptions = enum {
 };
 
 const SortDirection = enum {
-    ascending,
-    descending,
+    asc,
+    desc,
 };
 
 const SampleOption = enum {
@@ -3272,11 +3272,11 @@ test "sort(self, opt)                          : MutSelf\n" {
     };
 
     const sorting_order = [_]SortDirection{
-        .ascending,
-        .ascending,
-        .ascending,
-        .descending,
-        .descending,
+        .asc,
+        .asc,
+        .asc,
+        .desc,
+        .desc,
     };
 
     var buffer: [6]i32 = undefined;
