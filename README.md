@@ -141,9 +141,9 @@ These characteristics can be chained to construct a scalar iterator:
 // create an iterator with filters, transforms, and stride
 var itr = Fluent
     .iterator(.forward, slice)
-    .map({
+    .map(.{
         // ...
-    }).filter({
+    }).filter(.{
         // ...
     }).strided(N);
 ```
@@ -205,9 +205,9 @@ sort          - sorts the range in ascending or descending order
 Immutable:
 
 count          - counts all, left, right given a scalar or regex
-digit          - returns optional integer parsed from string
+digit          - returns integer (or error) parsed from string
 differenceWith - returns set diference between acquired slice and given slice
-float          - returns optional floating-point number parsed from string
+float          - returns floating-point number (or error) parsed from string
 intersectWith  - returns set intersection between acquired slice and given slice
 isDigit        - check if string only contains digits
 isAlpha        - check if string only contains alphabetic characters
