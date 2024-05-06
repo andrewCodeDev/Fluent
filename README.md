@@ -8,21 +8,6 @@ Fluent is a single file implementation. Add the `fluent.zig` file to your projec
 
 # Examples
 
-REGEX statements can be run at comptime:
-```Zig
-fn foo(string: []const u8) bool {
-    comptime {
-        var itr = Fluent.match("\\w+", string);
-        return itr.next() != null;
-    }
-}
-
-// later...
-
-const x: if (foo("a")) usize else u8 = 1;
-
-```
-
 Use REGEX to find all substrings starting with a, b, or c followed by digits in a string:
 
 ```Zig
@@ -58,6 +43,17 @@ const result = Fluent.init(str_a)   // initialize our interface on str_a
         .concat(str_b, buf[0..])    // concatenate str_b into buffer
         .trim(.left, .scalar, ' ')  // trim spaces on left side
         .title();                   // python title function
+```
+REGEX statements can be run at comptime:
+```Zig
+fn foo(string: []const u8) bool {
+    comptime {
+        return Fluent.init(string).contains(.regex, "\\w+");
+    }
+}
+// later...
+const x: if (foo("a")) usize else u8 = 1;
+
 ```
 Fuse map-functions to calculate sigmoid to buffer:
 ```Zig
