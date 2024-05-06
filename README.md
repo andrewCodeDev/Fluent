@@ -8,6 +8,21 @@ Fluent is a single file implementation. Add the `fluent.zig` file to your projec
 
 # Examples
 
+REGEX statements can be run at comptime:
+```Zig
+fn foo(string: []const u8) bool {
+    comptime {
+        var itr = Fluent.match("\\w+", string);
+        return itr.next() != null;
+    }
+}
+
+// later...
+
+const x: if (foo("a")) usize else u8 = 1;
+
+```
+
 Use REGEX to find all substrings starting with a, b, or c followed by digits in a string:
 
 ```Zig
