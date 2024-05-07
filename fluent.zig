@@ -713,23 +713,22 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             };
         }
 
+
         /// trim - trims left, right, or all based on any, sequence, or scalar
         pub fn trim(
             self: Self,
             comptime direction: DirectionOption,
             comptime option: TrimOptions,
-            actor: Parameter(Self.DataType, option),
+            comptime needle: Parameter(Self.DataType, option),
         ) Self {
-            if (self.items.len <= 1) return self;
-
-            const head: usize = if (direction == .left or direction == .all) 
-                trimLeft(self, option, actor) else 0;
-
-            const tail: usize = if (direction == .right or direction == .all)
-                trimRight(self, option, actor) else self.items.len;
-
-            return .{ .items = if (head < tail) self.items[head..tail] else self.items[0..0] };
+            if (self.items.len == 0) return self;
+            return switch (direction) {
+                .left  => .{ .items = self.items[trimLeft(self, option, needle)..] },
+                .right => .{ .items = self.items[0..trimRight(self, option, needle)] },
+                .all => self.trim(.left, option, needle).trim(.right, option, needle),
+            };
         }
+
 
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
@@ -746,8 +745,11 @@ fn ImmutableNumericBackend(comptime Self: type) type {
         //  PRIVATE SECTION  //
         ///////////////////////
 
-        fn trimLeft(self: Self, comptime opt: TrimOptions, actor: Parameter(Self.DataType, opt)) usize {
-            if (self.items.len <= 1) return 0;
+        fn trimLeft(
+            self: Self,
+            comptime opt: TrimOptions,
+            actor: Parameter(Self.DataType, opt),
+        ) usize {
             var start: usize = 0;
             const end: usize = self.items.len;
             switch (opt) {
@@ -769,7 +771,6 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             comptime opt: TrimOptions,
             actor: Parameter(Self.DataType, opt),
         ) usize {
-            if (self.items.len <= 1) return 0;
             const start: usize = 0;
             var end: usize = self.items.len;
             switch (opt) {
@@ -1100,15 +1101,12 @@ fn ImmutableStringBackend(comptime Self: type) type {
             comptime mode: StringMode,
             comptime needle: Parameter(u8, mode),
         ) Self {
-            if (self.items.len <= 1) return self;
-
-            const head: usize = if (direction == .left or direction == .all) 
-                trimLeft(self, mode, needle) else 0;
-
-            const tail: usize = if (direction == .right or direction == .all) 
-                trimRight(self, mode, needle) else self.items.len;
-                
-            return .{ .items = if (head < tail) self.items[head..tail] else self.items[0..0] };
+            if (self.items.len == 0) return self;
+            return switch (direction) {
+                .left  => .{ .items = self.items[trimLeft(self, mode, needle)..] },
+                .right => .{ .items = self.items[0..trimRight(self, mode, needle)] },
+                .all => self.trim(.left, mode, needle).trim(.right, mode, needle),
+            };
         }
 
         /// count - counts all, left, right given a scalar, sequence, or any
@@ -1210,7 +1208,6 @@ fn ImmutableStringBackend(comptime Self: type) type {
             comptime mode: StringMode,
             comptime needle: Parameter(u8, mode),
         ) usize {
-            if (self.items.len <= 1) return 0;
             var start: usize = 0;
             const end: usize = self.items.len;
             switch (mode) {
@@ -3279,35 +3276,13 @@ test "trim(self, opt, kind, actor)              : scalar" {
             .trim(.all, .scalar, ' ');
         try expect(result.equal(source[5..source.len - 5]));
     }
+    {
+        const result = init("a").trim(.all, .scalar, 'a');
+        try expect(result.items.len == 0);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-test "trim(self, opt, kind, actor)             : predicate" {
-    const source = "     This is a string     ";
-    var buffer: [source.len]u8 = undefined;
-
-    {
-        const result = init(buffer[0..source.len])
-            .copy(source)
-            .trim(.left, .scalar, ' ');
-        try expect(result.equal(source[5..]));
-    }
-
-    {
-        const result = init(buffer[0..source.len])
-            .copy(source)
-            .trim(.right, .scalar, ' ');
-        try expect(result.equal(source[0 .. source.len - 5]));
-    }
-
-    {
-        const result = init(buffer[0..source.len])
-            .copy(source)
-            .trim(.all, .scalar, ' ');
-        try expect(result.equal(source[5 .. source.len - 5]));
-    }
-}
 
 test "trim(self, opt, kind, actor)              : regex" {
     const source = "     This is a string     ";
@@ -3329,6 +3304,10 @@ test "trim(self, opt, kind, actor)              : regex" {
             .copy(source)
             .trim(.all, .regex, "\\s+");
         try expect(result.equal("This is a string"));
+    }
+    {
+        const result = Fluent.init("bababa1abab").trim(.all, .regex, "(ba|ab)+");
+        try expect(result.equal("1"));
     }
 }
 
