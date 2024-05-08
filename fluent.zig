@@ -415,7 +415,7 @@ fn IteratorInterface(
 ////////////////////////////////////////////////////
 // GeneralBackend //////////////////////////////////
 
-pub fn ImmutableGeneralBackend(comptime Self: type) type {
+pub fn GeneralImmutableBackend(comptime Self: type) type {
     return struct {
         /// all - check if all elements of the acquired slice are true by given predicate
         pub fn all(self: Self, predicate: fn (Self.DataType) bool) bool {
@@ -609,7 +609,7 @@ pub fn ImmutableGeneralBackend(comptime Self: type) type {
 
 fn ImmutableNumericBackend(comptime Self: type) type {
     return struct {
-        pub usingnamespace ImmutableGeneralBackend(Self);
+        pub usingnamespace GeneralImmutableBackend(Self);
 
         ///////////////////////
         //  PUBLIC SECTION   //
@@ -719,7 +719,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             self: Self,
             comptime direction: DirectionOption,
             comptime option: TrimOptions,
-            needle: Parameter(Self.DataType, option),
+            comptime needle: Parameter(Self.DataType, option),
         ) Self {
             if (self.items.len == 0) return self;
             return switch (direction) {
@@ -878,8 +878,11 @@ fn ImmutableNumericBackend(comptime Self: type) type {
 // permutations, and partitioning.                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-pub fn MutableGeneralBackend(comptime Self: type) type {
+pub fn GeneralMutableBackend(comptime Self: type) type {
     return struct {
+
+        // includes operations like reduce, find, and iterators
+        pub usingnamespace GeneralImmutableBackend(Self);
 
         /// sort - sorts the range in ascending or descending order
         pub fn sort(self: Self, comptime direction: SortDirection) Self {
@@ -958,7 +961,7 @@ fn MutableNumericBackend(comptime Self: type) type {
 
         pub usingnamespace ImmutableNumericBackend(Self);
 
-        pub usingnamespace MutableGeneralBackend(Self);
+        pub usingnamespace GeneralMutableBackend(Self);
     };
 }
 
@@ -973,7 +976,7 @@ const StringMode = enum { regex, scalar };
 fn ImmutableStringBackend(comptime Self: type) type {
     return struct {
 
-        pub usingnamespace ImmutableGeneralBackend(Self);
+        pub usingnamespace GeneralImmutableBackend(Self);
 
         ///////////////////////
         //  PUBLIC SECTION   //
@@ -1329,7 +1332,7 @@ fn MutableStringBackend(comptime Self: type) type {
 
         pub usingnamespace ImmutableStringBackend(Self);
 
-        pub usingnamespace MutableGeneralBackend(Self);
+        pub usingnamespace GeneralMutableBackend(Self);
 
         /// lower - transform all alphabetic characters to lower case
         pub fn lower(self: Self) Self {
@@ -2185,6 +2188,28 @@ fn RegexNAND(
     };
 }
 
+fn RegexLookAhead(
+    // only used for (?=) and (?!) type clauses,
+    // should only appear in those contextes
+    comptime this: type,
+    comptime positive: bool,
+) type {
+    return struct {
+        pub inline fn call(str: []const u8, i: usize, prev: bool) ?usize {
+            if (comptime @hasDecl(this, "call")) {
+                if (comptime positive) {
+                    return if (this.call(str, i, prev)) |_| i else null;
+                } else {
+                    return if (this.call(str, i, prev)) |_| null else i;
+                }
+            } else {
+                // case of empty lookahead
+                return if (comptime positive) i else null;
+            }
+        }
+    };            
+}
+
 fn RegexUnit(
     comptime Callable: anytype,
     comptime Quantifier: ?RegexQuantifier,
@@ -2332,8 +2357,29 @@ fn ParseRegexTreeDepth(
                 if (isRegexBracket(s)) {
                     // this branch deduces an entire sub-automaton
                     var closing = closingBracket(sq, bracketSet(s), 0);
+
                     // parse everything between the brackets
-                    const T: type = ParseRegexTreeBreadth(sq[1..closing], s.char);
+                    const T: type = blk: {
+                        if (closing > 2) {
+
+                            if (tag(_sq[1]) != .q or tag(_sq[2]) != .s) {
+                                break :blk ParseRegexTreeBreadth(sq[1..closing], s.char);                                
+                            }
+                            const t = _sq[1].q;
+                            const u = _sq[2].s;
+
+                            if (tag(t) == .optional) {
+                                if (u.char == '=' and !u.escaped) { // (?=
+                                    break :blk RegexLookAhead(ParseRegexTreeBreadth(sq[3..closing], s.char), true);
+                                }
+                                if (u.char == '!' and !u.escaped) { // (?!
+                                    break :blk RegexLookAhead(ParseRegexTreeBreadth(sq[3..closing], s.char), false);
+                                }
+                            }
+                        }
+                        break :blk ParseRegexTreeBreadth(sq[1..closing], s.char);
+                    };
+
                     // the entire automaton can be quantified
                     const q: ?RegexQuantifier =
                         if (closing + 1 >= _sq.len) null else switch (_sq[closing + 1]) {
