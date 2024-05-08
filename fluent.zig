@@ -415,7 +415,7 @@ fn IteratorInterface(
 ////////////////////////////////////////////////////
 // GeneralBackend //////////////////////////////////
 
-pub fn GeneralImmutableBackend(comptime Self: type) type {
+pub fn ImmutableGeneralBackend(comptime Self: type) type {
     return struct {
         /// all - check if all elements of the acquired slice are true by given predicate
         pub fn all(self: Self, predicate: fn (Self.DataType) bool) bool {
@@ -609,7 +609,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
 
 fn ImmutableNumericBackend(comptime Self: type) type {
     return struct {
-        pub usingnamespace GeneralImmutableBackend(Self);
+        pub usingnamespace ImmutableGeneralBackend(Self);
 
         ///////////////////////
         //  PUBLIC SECTION   //
@@ -657,7 +657,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             return find(self, mode, needle) != null;
         }
 
-        /// startsWith  - checks if the acquired slice starts with a scalar, sequence, or any
+        /// startsWith - checks if the acquired slice starts with a scalar, sequence, or any
         pub fn startsWith(
             self: Self,
             comptime mode: FluentMode,
@@ -719,7 +719,7 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             self: Self,
             comptime direction: DirectionOption,
             comptime option: TrimOptions,
-            comptime needle: Parameter(Self.DataType, option),
+            needle: Parameter(Self.DataType, option),
         ) Self {
             if (self.items.len == 0) return self;
             return switch (direction) {
@@ -878,11 +878,8 @@ fn ImmutableNumericBackend(comptime Self: type) type {
 // permutations, and partitioning.                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-pub fn GeneralMutableBackend(comptime Self: type) type {
+pub fn MutableGeneralBackend(comptime Self: type) type {
     return struct {
-
-        // includes operations like reduce, find, and iterators
-        pub usingnamespace GeneralImmutableBackend(Self);
 
         /// sort - sorts the range in ascending or descending order
         pub fn sort(self: Self, comptime direction: SortDirection) Self {
@@ -959,15 +956,9 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
 fn MutableNumericBackend(comptime Self: type) type {
     return struct {
 
-        ///////////////////////
-        //  PUBLIC SECTION   //
-        ///////////////////////
+        pub usingnamespace ImmutableNumericBackend(Self);
 
-        pub usingnamespace GeneralMutableBackend(Self);
-
-        ///////////////////////
-        //  PRIVATE SECTION  //
-        ///////////////////////
+        pub usingnamespace MutableGeneralBackend(Self);
     };
 }
 
@@ -982,7 +973,7 @@ const StringMode = enum { regex, scalar };
 fn ImmutableStringBackend(comptime Self: type) type {
     return struct {
 
-        pub usingnamespace GeneralImmutableBackend(Self);
+        pub usingnamespace ImmutableGeneralBackend(Self);
 
         ///////////////////////
         //  PUBLIC SECTION   //
@@ -1338,7 +1329,7 @@ fn MutableStringBackend(comptime Self: type) type {
 
         pub usingnamespace ImmutableStringBackend(Self);
 
-        pub usingnamespace GeneralMutableBackend(Self);
+        pub usingnamespace MutableGeneralBackend(Self);
 
         /// lower - transform all alphabetic characters to lower case
         pub fn lower(self: Self) Self {
