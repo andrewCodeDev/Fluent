@@ -2358,9 +2358,8 @@ fn ParseRegexTreeDepth(
                     // this branch deduces an entire sub-automaton
                     var closing = closingBracket(sq, bracketSet(s), 0);
 
-                    // parse everything between the brackets
                     const T: type = blk: {
-                        if (closing > 2) {
+                        if (closing > 2 and s.char == '(') {
 
                             if (tag(_sq[1]) != .q or tag(_sq[2]) != .s) {
                                 break :blk ParseRegexTreeBreadth(sq[1..closing], s.char);                                
@@ -2377,6 +2376,8 @@ fn ParseRegexTreeDepth(
                                 }
                             }
                         }
+
+                        // parse everything between the brackets
                         break :blk ParseRegexTreeBreadth(sq[1..closing], s.char);
                     };
 
