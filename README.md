@@ -260,28 +260,32 @@ split           - splits a string based on a delimiting expression
 
 ### Special Characters:
 ```
+^  - begins with
+$  - ends with
+.  - any character
 \d - digits
 \D - no-digits
 \w - alphanumeric
 \W - no-alphanumeric
 \s - whitespace
 \S - no-whitespace
- . - any character
 ```
 ### Quantifiers:
 ```
-+ - one or more
-* - any quantity
-? - none or one
-{n} - exactly n
++     - one or more
+*     - any quantity
+?     - none or one
+{n}   - exactly n
 {m,n} - between m and n (inclusive)
 ```
 ### Operators:
 ```
-| - or clause
-() - capture group
-[] - character set
-[^] - negated character set
+|     - alternation (or clause)
+()    - capture group
+[]    - character set
+[^]   - negated character set
 [a-z] - character spans
+(?=)  - positive lookahead
+(?!)  - negative lookahead
 ```
 
