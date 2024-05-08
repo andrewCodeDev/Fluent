@@ -68,15 +68,11 @@ pub fn iterator(
 
     const P = [*c]const T;
 
-    const ptr: [*c]const T = if (comptime mode == .forward)
-        @as(P, @ptrCast(items.ptr))
-    else
-        (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
+    const ptr: P = if (comptime mode == .forward)
+        @as(P, @ptrCast(items.ptr)) else (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
 
-    const end: [*c]const T = if (comptime mode == .forward)
-        @as(P, @ptrCast(items.ptr)) + items.len
-    else
-        @as(P, @ptrCast(items.ptr)) - 1;
+    const end: P = if (comptime mode == .forward)
+        @as(P, @ptrCast(items.ptr)) + items.len else @as(P, @ptrCast(items.ptr)) - 1;
 
     return .{
         .ptr = ptr,
@@ -101,6 +97,11 @@ pub fn MatchIterator(
         pub fn next(self: *Self) ?[]const u8 {
             while (self.index < self.items.len) : (self.index += 1) {
                 if (tree.call(self.items, self.index, false)) |last| {
+
+                    // non-advancing calls
+                    if (self.index == last) 
+                        continue;
+
                     defer self.index = last;
                     return self.items[self.index..last];
                 }
@@ -134,7 +135,15 @@ fn SplitIterator(comptime expression: []const u8) type {
             var stop: usize = start;
             const end: ?usize = blk: {
                 while (stop < self.items.len) : (stop += 1) {
-                    if (tree.call(self.items, stop, false)) |n| break :blk n else continue;
+
+                    const last = tree.call(self.items, stop, false) orelse continue;
+
+                    // non-advancing calls
+                    if (start == last)
+                        continue;
+
+                    break :blk last;
+                    
                 } else break :blk null;
             };
             defer self.index = end;
