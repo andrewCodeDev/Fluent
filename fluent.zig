@@ -2344,6 +2344,36 @@ fn endsWithRegex(
     return if (str.len > 0 and i == str.len) i else null;
 }
 
+fn isWordBoundary(
+    str: []const u8,
+    i: usize,
+) ?usize {
+
+    if (str.len == 0) 
+        return null;
+
+    if (i == 0){
+        return if (isWordCharacter(str[i])) i else null;
+    }
+    if (i == str.len){
+        return if (isWordCharacter(str[i - 1])) i else null;
+    }
+    if (isWordCharacter(str[i]) and !isWordCharacter(str[i - 1])) {
+        return i;
+    }
+    if (isWordCharacter(str[i - 1]) and !isWordCharacter(str[i])) {
+        return i;
+    }
+    return null;
+}
+
+fn isNotWordBoundary(
+    str: []const u8,
+    i: usize,
+) ?usize {
+    return if (isWordBoundary(str, i) == null) i else null; 
+}
+
 fn ParseRegexTreeDepth(
     comptime sq: []const RegexSymbol,
     comptime enclosing: u8,
@@ -2440,6 +2470,8 @@ fn ParseRegexTreeDepth(
                         'H' => break :outer RegexUnit(invertRegex(false, s.negated, isHorizontalWhitespace), q),
                         'v' => break :outer RegexUnit(invertRegex(true, s.negated, isVerticalWhitespace), q),
                         'V' => break :outer RegexUnit(invertRegex(false, s.negated, isVerticalWhitespace), q),
+                        'b' => break :outer RegexUnit(if (s.negated) isNotWordBoundary else isWordBoundary, q),
+                        'B' => break :outer RegexUnit(if (s.negated) isWordBoundary else isNotWordBoundary, q),
                         else => {},
                     }
                 } else {
