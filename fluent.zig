@@ -1052,19 +1052,31 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return std.fmt.parseFloat(T, self.items);
         }
 
+        // regex returns a range
+        const RegexFindResult = struct { 
+            pos: usize,
+            end: usize,
+        };
+
         /// findFrom - returns first index after a given position of scalar, slice, or any
         pub fn findFrom(
             self: Self,
             comptime mode: StringMode,
             start_index: usize,
             comptime needle: Parameter(u8, mode),
-        ) ?usize {
+        ) switch(mode) {
+            .scalar => ?usize, 
+            .regex => ?RegexFindResult,      
+        } {
             return switch (mode) {
                 .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
                 .regex => blk: {
                     var itr = Fluent.match(needle, self.items[start_index..]);
                     const items = itr.next() orelse break :blk null;
-                    break :blk (itr.index - items.len) + start_index;
+                    break :blk RegexFindResult {
+                        .pos = (itr.index - items.len) + start_index,
+                        .end = itr.index + start_index
+                    };  
                 },
             };
         }
@@ -1084,7 +1096,10 @@ fn ImmutableStringBackend(comptime Self: type) type {
             self: Self,
             comptime mode: StringMode,
             comptime needle: Parameter(u8, mode),
-        ) ?usize {
+        ) switch(mode) {
+            .scalar => ?usize, 
+            .regex => ?RegexFindResult,      
+        } {
             return findFrom(self, mode, 0, needle);
         }
 
@@ -2361,8 +2376,8 @@ fn isWordBoundary(
     if (isWordCharacter(str[i]) and !isWordCharacter(str[i - 1])) {
         return i;
     }
-    if (isWordCharacter(str[i - 1]) and !isWordCharacter(str[i])) {
-        return i;
+    if (isWordCharacter(str[i]) and !isWordCharacter(str[i + 1])) {
+        return i + 1;
     }
     return null;
 }
@@ -2547,28 +2562,33 @@ test "findFrom(self, mode, start_index, needle) : regex" {
     const self = init("This is a test");
     {
         const result = self.findFrom(.regex, 0, "This") orelse unreachable;
-        try expect(result == 0);
+        try testing.expectEqual(result.pos, 0);
+        try testing.expectEqual(result.end, 4);
     }
     {
         const result = self.findFrom(.regex, 9, "test") orelse unreachable;
-
-        try std.testing.expectEqual(10, result);
+        try testing.expectEqual(10, result.pos);
+        try testing.expectEqual(14, result.end);
     }
     {
         const result = self.findFrom(.regex, 5, "is") orelse unreachable;
-        try expect(result == 5);
+        try testing.expectEqual(result.pos, 5);
+        try testing.expectEqual(result.end, 7);
     }
     {
         const result = self.findFrom(.regex, 0, "[T]") orelse unreachable;
-        try expect(result == 0);
+        try testing.expectEqual(result.pos, 0);
+        try testing.expectEqual(result.end, 1);
     }
     {
         const result = self.findFrom(.regex, 9, "[test]") orelse unreachable;
-        try expect(result == 10);
+        try testing.expectEqual(result.pos, 10);
+        try testing.expectEqual(result.end, 11);
     }
     {
         const result = self.findFrom(.regex, 5, "[is]") orelse unreachable;
-        try expect(result == 5);
+        try testing.expectEqual(result.pos, 5);
+        try testing.expectEqual(result.end, 6);
     }
 }
 
