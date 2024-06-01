@@ -94,7 +94,7 @@ pub fn MatchIterator(
             return .{ .items = items, .index = 0 };
         }
 
-        pub fn next(self: *Self) ?[]const u8 {
+        pub fn next(self: *Self) ?FluentInterface([]const u8) {
             while (self.index < self.items.len) : (self.index += 1) {
                 if (tree.call(self.items, self.index, false)) |last| {
 
@@ -103,7 +103,7 @@ pub fn MatchIterator(
                         continue;
 
                     defer self.index = last;
-                    return self.items[self.index..last];
+                    return Fluent.init(self.items[self.index..last]);
                 }
             }
             return null;
@@ -130,7 +130,7 @@ fn SplitIterator(comptime expression: []const u8) type {
             return .{ .items = items, .index = 0 };
         }
 
-        pub fn next(self: *Self) ?[]const u8 {
+        pub fn next(self: *Self) ?FluentInterface([]const u8) {
             const start = self.index orelse return null;
             var stop: usize = start;
             const end: ?usize = blk: {
@@ -147,7 +147,7 @@ fn SplitIterator(comptime expression: []const u8) type {
                 } else break :blk null;
             };
             defer self.index = end;
-            return self.items[start..stop];
+            return Fluent.init(self.items[start..stop]);
         }
     };
 }
@@ -220,9 +220,6 @@ pub fn bind(
 
 fn BindRetun(
     comptime bind_tuple: anytype,
-
-
-
     comptime function: anytype,
 ) type {
     const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
@@ -343,18 +340,18 @@ fn IteratorInterface(
         pub fn window(
             self: *Self,
             window_size: usize,
-        ) ?[]const DataType {
+        ) ?FluentInterface([]const DataType) {
             switch (comptime Mode) {
                 .forward => {
                     if (self.ptr + window_size <= self.end) {
                         defer _ = self.next();
-                        return self.ptr[0..window_size];
+                        return Fluent.init(self.ptr[0..window_size]);
                     }
                 },
                 .reverse => {
                     if ((self.ptr + 1) - window_size > self.end) {
                         defer _ = self.next();
-                        return ((self.ptr + 1) - window_size)[0..window_size];
+                        return Fluent.init(((self.ptr + 1) - window_size)[0..window_size]);
                     }
                 },
             }
@@ -516,15 +513,25 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
 
         
         /// print - prints the acquired slice based on a given format string
-        pub fn print(self: Self, comptime format: []const u8) Self {
+        pub fn print(self: Self, comptime print_format: []const u8) Self {
             // this is intended to work similarly to std.log.info
             const stderr = std.io.getStdErr();
             defer stderr.close();
             const writer = stderr.writer();
             std.debug.getStderrMutex().lock();
             defer std.debug.getStderrMutex().unlock();
-            writer.print(format, .{self.items}) catch {};
+            writer.print(print_format, .{self.items}) catch {};
             return self;
+        }    
+    
+        pub fn format(
+            self: Self,
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            const fmt: []const u8 = if (Self.DataType == u8) "{s}" else "{any}";
+            _ = try writer.print(fmt ++ "\n", .{ self.items });
         }
 
         /// sample - randomly samples a range from the acquired slice given a size
@@ -1052,6 +1059,15 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return std.fmt.parseFloat(T, self.items);
         }
 
+        /// float - parses the string as a floating-point number
+        pub fn cast(self: Self, comptime T: type) !T {
+            return switch (@typeInfo(T)) {
+                .Int, .ComptimeInt => self.digit(),
+                .Float, .ComptimeFloat => self.float(),
+                else => @compileError("cast: requires floating point or integer types.")
+            };
+        }
+
         // regex returns a range
         const RegexFindResult = struct { 
             pos: usize,
@@ -1072,9 +1088,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
                 .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
                 .regex => blk: {
                     var itr = Fluent.match(needle, self.items[start_index..]);
-                    const items = itr.next() orelse break :blk null;
+                    const x = itr.next() orelse break :blk null;
                     break :blk RegexFindResult {
-                        .pos = (itr.index - items.len) + start_index,
+                        .pos = (itr.index - x.items.len) + start_index,
                         .end = itr.index + start_index
                     };  
                 },
@@ -1258,7 +1274,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
                     const expression = "(" ++ needle ++ ")$";
                     var itr = Fluent.match(expression, self.items);
                     if (itr.next()) |str| {
-                        end = (itr.index - str.len);
+                        end = (itr.index - str.items.len);
                     }
                 },
             }
@@ -3094,9 +3110,9 @@ test "max(self)                                 : Self.DataType" {
 test "split(self, mode, delimiter)              : SplitIterator" {
     const self = init("This is a string");
     const expected = [_][]const u8{ "This", "is", "a", "string" };
-    var iter = self.split(" ");
+    var itr = self.split(" ");
     for (expected) |item| {
-        const result = init(iter.next() orelse unreachable);
+        const result = init(itr.next().?.items);
         try expect(result.equal(item));
     }
 }
@@ -3728,16 +3744,16 @@ test "iterator                                  : next" {
 test "iterator                                  : window" {
     {
         var itr = Fluent.iterator(.forward, "hello");
-        try std.testing.expectEqualSlices(u8, itr.window(3).?, "hel");
-        try std.testing.expectEqualSlices(u8, itr.window(3).?, "ell");
-        try std.testing.expectEqualSlices(u8, itr.window(3).?, "llo");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?.items, "hel");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?.items, "ell");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?.items, "llo");
         try expect(itr.window(3) == null);
     }
     {
         var itr = Fluent.iterator(.reverse, "hello");
-        try std.testing.expectEqualSlices(u8, itr.window(3).?, "llo");
-        try std.testing.expectEqualSlices(u8, itr.window(3).?, "ell");
-        try std.testing.expectEqualSlices(u8, itr.window(3).?, "hel");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?.items, "llo");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?.items, "ell");
+        try std.testing.expectEqualSlices(u8, itr.window(3).?.items, "hel");
         try expect(itr.window(3) == null);
     }
 }
@@ -3745,82 +3761,82 @@ test "iterator                                  : window" {
 test "regex                                     : match iterator" {
     { // match special characters (typical) - one or more
         var itr = match("\\d+", "123a456");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "123");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "456");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "123");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "456");
         try std.testing.expect(itr.next() == null);
     }
     { // match special characters (typical) - exact
         var itr = match("\\d{3}", "123456");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "123");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "456");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "123");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "456");
         try std.testing.expect(itr.next() == null);
     }
     { // match special characters (typical) - between
         var itr = match("\\d{3,4}", "123456");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "1234");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "1234");
         try std.testing.expect(itr.next() == null);
     }
     { // match special characters (inverse)
         var itr = match("\\D+", "123a456");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "a");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "a");
         try std.testing.expect(itr.next() == null);
     }
     { // pipe-or clauses
         var itr = match("abc|def", "_abc_def_");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "abc");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "def");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "abc");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "def");
         try std.testing.expect(itr.next() == null);
     }
     {
         var itr = match("(a+bc)+", "_aaabc_abcabc_bc_abc_");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "aaabc");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "abcabc");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "abc");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "aaabc");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "abcabc");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "abc");
         try std.testing.expect(itr.next() == null);
     }
     { // character sets (typical)
         var itr = match("[a1]+", "_a112_21aa112_a_1_x_2");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "a11");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "1aa11");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "a");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "1");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "a11");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "1aa11");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "a");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "1");
         try std.testing.expect(itr.next() == null);
     }
     { // character sets (negated)
         var itr = match("[^a1]+", "_a112_21aa112_a_1_x_2");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "_");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "2_2");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "2_");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "_");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "_x_2");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "_");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "2_2");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "2_");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "_");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "_x_2");
         try std.testing.expect(itr.next() == null);
     }
     { // character sets (negated)
         var itr = match("[^\\d]+", "_a112_21aa112_a_1_x_2");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "_a");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "_");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "aa");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "_a_");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "_x_");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "_a");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "_");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "aa");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "_a_");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "_x_");
         try std.testing.expect(itr.next() == null);
     }
     { // character sets (compound)
         var itr = match("[abc]\\d+", "_ab112_c987b123_d16_");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "b112");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "c987");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "b123");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "b112");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "c987");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "b123");
         try std.testing.expect(itr.next() == null);
     }
     { // character sets (spans)
         var itr = Fluent.match("[a-zA-Z]+", "bb12avxz34CBF");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "bb");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "avxz");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "CBF");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "bb");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "avxz");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "CBF");
         try std.testing.expect(itr.next() == null);
     }
     { // backtracking optimization
         var itr = Fluent.match("\".*\"", "xxx\"Hello, World!\"xxx");
-        try std.testing.expectEqualSlices(u8, itr.next() orelse unreachable, "\"Hello, World!\"");
+        try std.testing.expectEqualSlices(u8, itr.next().?.items, "\"Hello, World!\"");
         try std.testing.expect(itr.next() == null);
     }
 }
@@ -3829,8 +3845,8 @@ test "regex-engine1                             : match iterator -> regex" {
     {
         const expression = "\\d+";
         const string = "0123456789";
-        var iter = match(expression, string);
-        const result = iter.next() orelse unreachable;
+        var itr = match(expression, string);
+        const result = itr.next().?.items;
         try expectEqSlice(u8, "0123456789", result);
     }
 }
@@ -3840,8 +3856,8 @@ test "regex-engine3                             : match iterator -> regex" {
     {
         const expression = "\\d+";
         const string = "aa0123456789aa";
-        var iter = match(expression, string);
-        const result = iter.next() orelse unreachable;
+        var itr = match(expression, string);
+        const result = itr.next().?.items;
         try expectEqSlice(u8, "0123456789", result);
     }
 }
@@ -3849,8 +3865,8 @@ test "regex-engine3                             : match iterator -> regex" {
 test "regex-engine4                             : match iterator -> regex" {
     const expression = "\\d+";
     const string = "\\dDmW0123456789aa\\1:";
-    var iter = match(expression, string);
-    const result = iter.next() orelse unreachable;
+    var itr = match(expression, string);
+    const result = itr.next().?.items;
     try expectEqSlice(u8, "0123456789", result);
 }
 
@@ -3858,8 +3874,8 @@ test "regex-engine5                             : match iterator -> regex" {
 
    const expression = "\\d*";
    const string = "\\dDmW0123456789aa\\1:";
-   var iter = match(expression, string);
-   const result = iter.next() orelse unreachable;
+   var itr = match(expression, string);
+   const result = itr.next().?.items;
    try expectEqSlice(u8, "0123456789", result);
 
 }
@@ -3869,8 +3885,8 @@ test "regex-engine6                             : match iterator -> regex" {
     {
         const expression = "\\d?";
         const string = "abc0123456789abc";
-        var iter = match(expression, string);
-        const result = iter.next() orelse unreachable;
+        var itr = match(expression, string);
+        const result = itr.next().?.items;
         try expectEqSlice(u8, "0", result);
     }
 }
@@ -3879,8 +3895,8 @@ test "regex-engine7                             : match iterator -> regex" {
     {
         const expression = "\\d{10}";
         const string = "abc0123456789abc";
-        var iter = match(expression, string);
-        const result = iter.next() orelse unreachable;
+        var itr = match(expression, string);
+        const result = itr.next().?.items;
         try expectEqSlice(u8, "0123456789", result);
     }
 }
@@ -3888,16 +3904,16 @@ test "regex-engine7                             : match iterator -> regex" {
 test "regex-engine9                             : match iterator -> regex" {
     const expression = "\\d{11}";
     const string = "abc0123456789abc";
-    var iter = match(expression, string);
-    const result = iter.next();
+    var itr = match(expression, string);
+    const result = itr.next();
     try expect(result == null);
 }
 
 test "regex-engine10                            : match iterator -> regex" {
      const expression = "\\d{0,10}";
      const string = "abc0123456789abc";
-     var iter = match(expression, string);
-     const result = iter.next() orelse unreachable;
+     var itr = match(expression, string);
+     const result = itr.next().?.items;
      try expectEqSlice(u8, "0123456789", result);
 }
 
@@ -3905,8 +3921,8 @@ test "regex-engine11                            : match iterator -> regex" {
     {
         const expression = "\\D\\D\\D\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\D\\D\\D";
         const string = "abc0123456789abc";
-        var iter = match(expression, string);
-        const result = iter.next() orelse unreachable;
+        var itr = match(expression, string);
+        const result = itr.next().?.items;
         try expectEqSlice(u8, "abc0123456789abc", result);
     }
 }
@@ -3915,8 +3931,8 @@ test "regex-engine12                            : match iterator -> regex" {
     {
         const expression = "\\D\\D\\D\\d{0,10}\\D\\D\\D";
         const string = "abc0123456789abc";
-        var iter = match(expression, string);
-        const result = iter.next() orelse unreachable;
+        var itr = match(expression, string);
+        const result = itr.next().?.items;
         try expectEqSlice(u8, "abc0123456789abc", result);
     }
 }
@@ -3925,9 +3941,9 @@ test "regex-engine13                            : match iterator -> regex" {
     {
         const expression = "\\D|\\d";
         const string = "abc0123456789abc";
-        var iter = match(expression, string);
+        var itr = match(expression, string);
         for (string) |ch| {
-            const result = iter.next() orelse unreachable;
+            const result = itr.next().?.items;
             try expect(result[0] == ch);
         }
     }
@@ -3937,9 +3953,9 @@ test "regex-engine14                            : match iterator -> regex" {
     {
         const expression = "\\D?|\\d?";
         const string = "abc0123456789abc";
-        var iter = match(expression, string);
+        var itr = match(expression, string);
         for (string) |ch| {
-            const result = iter.next() orelse unreachable;
+            const result = itr.next().?.items;
             try expect(result[0] == ch);
         }
     }
@@ -3948,84 +3964,84 @@ test "regex-engine14                            : match iterator -> regex" {
 test "regex-engine15                            : match iterator -> regex" {
     const expression = "[abc]{3}|[0-9]{10}";
     const string = "abc0123456789abc";
-    var iter = match(expression, string);
-    try expectEqSlice(u8, "abc", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "abc", iter.next() orelse unreachable);
+    var itr = match(expression, string);
+    try expectEqSlice(u8, "abc", itr.next().?.items);
+    try expectEqSlice(u8, "0123456789", itr.next().?.items);
+    try expectEqSlice(u8, "abc", itr.next().?.items);
 }
 
 test "regex-engine16                            : match iterator -> regex" {
     const expression = "\\D[abc]+|\\d[0-9]+";
     const string = "abc0123456789abc";
-    var iter = match(expression, string);
-    try expectEqSlice(u8, "abc", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "abc", iter.next() orelse unreachable);
+    var itr = match(expression, string);
+    try expectEqSlice(u8, "abc", itr.next().?.items);
+    try expectEqSlice(u8, "0123456789", itr.next().?.items);
+    try expectEqSlice(u8, "abc", itr.next().?.items);
 }
 
 test "regex-engine17                            : match iterator -> regex" {
     const expression = "[abc]?|[0-9]{10}";
     const string = "abc0123456789abc";
-    var iter = match(expression, string);
-    try expectEqSlice(u8, "a", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "b", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "c", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "a", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "b", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "c", iter.next() orelse unreachable);
+    var itr = match(expression, string);
+    try expectEqSlice(u8, "a", itr.next().?.items);
+    try expectEqSlice(u8, "b", itr.next().?.items);
+    try expectEqSlice(u8, "c", itr.next().?.items);
+    try expectEqSlice(u8, "0123456789", itr.next().?.items);
+    try expectEqSlice(u8, "a", itr.next().?.items);
+    try expectEqSlice(u8, "b", itr.next().?.items);
+    try expectEqSlice(u8, "c", itr.next().?.items);
 }
 //
 test "regex-engine18                            : match iterator -> regex" {
     const expression = "\\d{3}([A-Za-z]+)\\d{3}";
     const string = "123Fluent123";
-    var iter = match(expression, string);
-    try expectEqSlice(u8, "123Fluent123", iter.next() orelse unreachable);
+    var itr = match(expression, string);
+    try expectEqSlice(u8, "123Fluent123", itr.next().?.items);
 }
 
 test "regex-engine19                            : match iterator -> regex" {
     const expression = "(\\d{3}([A-Za-z]+))?|\\d{3}";
     const string = "123Fluent123";
-    var iter = match(expression, string);
-    try expectEqSlice(u8, "123Fluent", iter.next() orelse unreachable);
-    try expectEqSlice(u8, "123", iter.next() orelse unreachable);
+    var itr = match(expression, string);
+    try expectEqSlice(u8, "123Fluent", itr.next().?.items);
+    try expectEqSlice(u8, "123", itr.next().?.items);
 }
 
 test "regex-engine20                            : match iterator -> regex" {
     const expression = "(([a-z][0-9])|([a-z][0-9]))+";
     const string = "a1b2c3d4e5f6g7h8";
-    var iter = match(expression, string);
-    try expectEqSlice(u8, "a1b2c3d4e5f6g7h8", iter.next() orelse unreachable);
+    var itr = match(expression, string);
+    try expectEqSlice(u8, "a1b2c3d4e5f6g7h8", itr.next().?.items);
 }
 
 test "regex-engine21                            : match iterator -> regex" {
     const expression = "(([a-z][0-9])|([a-z][0-9])?)+";
     const string = "a1b2c3d4e5f6g7h8";
-    var iter = match(expression, string);
-    try expectEqSlice(u8, "a1b2c3d4e5f6g7h8", iter.next() orelse unreachable);
+    var itr = match(expression, string);
+    try expectEqSlice(u8, "a1b2c3d4e5f6g7h8", itr.next().?.items);
 }
 
 test "regex-engine22                            : match iterator -> regex" {
     const expression = "(([a-z]?[0-9]?)?|([a-z]?[0-9]?)?)+";
     const string = "a1b2c3d4e5f6g7h8";
-    var iter = match(expression, string);
-    try expectEqSlice(u8, "a1b2c3d4e5f6g7h8", iter.next() orelse unreachable);
+    var itr = match(expression, string);
+    try expectEqSlice(u8, "a1b2c3d4e5f6g7h8", itr.next().?.items);
 }
 //
 test "regex-engine23                            : match iterator -> regex" {
     const expression = "(([a-z]?[0-9]?)?|([a-z]?[0-9]?)?)+";
     const string = "a1b2c3d4e5f6g7h8";
-    var iter = match(expression, string);
-    try expectEqSlice(u8, "a1b2c3d4e5f6g7h8", iter.next() orelse unreachable);
+    var itr = match(expression, string);
+    try expectEqSlice(u8, "a1b2c3d4e5f6g7h8", itr.next().?.items);
 }
 
 test "regex-engine25                            : match iterator -> regex" {
     {
         const expression = "[^0-9]+";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz", iter.next() orelse unreachable);
-        try expectEqSlice(u8, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz", itr.next().?.items);
+        try expectEqSlice(u8, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", itr.next().?.items);
     }
 }
 
@@ -4033,9 +4049,9 @@ test "regex-engine26                            : match iterator -> regex" {
     {
         const expression = "[^0-8]+";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz", iter.next() orelse unreachable);
-        try expectEqSlice(u8, "9ABCDEFGHIJKLMNOPQRSTUVWXYZ", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz", itr.next().?.items);
+        try expectEqSlice(u8, "9ABCDEFGHIJKLMNOPQRSTUVWXYZ", itr.next().?.items);
     }
 }
 
@@ -4043,9 +4059,9 @@ test "regex-engine27                            : match iterator -> regex" {
     {
         const expression = "[^1-9]+";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz0", iter.next() orelse unreachable);
-        try expectEqSlice(u8, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "abcdefghijklmnopqrstuvwxyz0", itr.next().?.items);
+        try expectEqSlice(u8, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", itr.next().?.items);
     }
 }
 
@@ -4053,8 +4069,8 @@ test "regex-engine28                            : match iterator -> regex" {
     {
         const expression = "([^a-z]+[^A-Z]+)";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "0123456789", itr.next().?.items);
     }
 }
 
@@ -4062,8 +4078,8 @@ test "regex-engine29                            : match iterator -> regex" {
     {
         const expression = "([^a-z^A-Z]+)";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "0123456789", itr.next().?.items);
     }
 }
 
@@ -4071,8 +4087,8 @@ test "regex-engine30                            : match iterator -> regex" {
     {
         const expression = "([^a-z^^^^A-Z]+)";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "0123456789", itr.next().?.items);
     }
 }
 
@@ -4080,8 +4096,8 @@ test "regex-engine31                            : match iterator -> regex" {
     {
         const expression = "([^a-z^A-Z]+)";
         const string = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "0123456789", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "0123456789", itr.next().?.items);
     }
 }
 
@@ -4089,8 +4105,8 @@ test "regex-engine32                            : match iterator -> regex" {
     {
         const expression = "a?b?c?d?e?f?g?";
         const string = "xyzabcdefg";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "abcdefg", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "abcdefg", itr.next().?.items);
     }
 }
 
@@ -4098,8 +4114,8 @@ test "regex-engine33                            : match iterator -> regex" {
     {
         const expression = "a+b+c+d+e+f+g+";
         const string = "abcdefghijklmnopqrstuvwxyz";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "abcdefg", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "abcdefg", itr.next().?.items);
     }
 }
 
@@ -4107,8 +4123,8 @@ test "regex-engine34                            : match iterator -> regex" {
     {
         const expression = "a{1}b{1}c{1}d{1}e{1}f{1}g";
         const string = "abcdefgh";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "abcdefg", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "abcdefg", itr.next().?.items);
     }
 }
 
@@ -4116,8 +4132,8 @@ test "regex-engine35                            : match iterator -> regex" {
     {
         const expression = "a{0,1}b{0,1}c{0,1}d{0,1}e{0,1}f{0,1}g{0,1}";
         const string = "xyzabcdefg";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "abcdefg", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "abcdefg", itr.next().?.items);
     }
 }
 
@@ -4125,8 +4141,8 @@ test "regex-engine36                            : match iterator-> regex" {
     {
         const expression = "(a)+(b)+(c)+(d)+(e)+(f)+(g)+";
         const string = "abcdefg";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "abcdefg", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "abcdefg", itr.next().?.items);
     }
 }
 
@@ -4134,8 +4150,8 @@ test "regex-engine37                            : match iterator-> regex" {
     {
         const expression = "(a){0,1}(b){0,1}(c){0,1}(d){0,1}";
         const string = "abcdefg";
-        var iter = match(expression, string);
-        try expectEqSlice(u8, "abcd", iter.next() orelse unreachable);
+        var itr = match(expression, string);
+        try expectEqSlice(u8, "abcd", itr.next().?.items);
     }
 }
 
@@ -4144,15 +4160,15 @@ test "regex-engine38                            : match iterator-> regex" {
     {
         const string = "Call us today at 123-456-7890 or 9876543210 to rewrite your DNA in Zig!";
         var itr = Fluent.match("\\d{3}-\\d{3}-\\d{4}|\\d{10}", string);
-        try std.testing.expectEqualSlices(u8, "123-456-7890", itr.next() orelse unreachable);
-        try std.testing.expectEqualSlices(u8, "9876543210", itr.next() orelse unreachable);
+        try std.testing.expectEqualSlices(u8, "123-456-7890", itr.next().?.items);
+        try std.testing.expectEqualSlices(u8, "9876543210", itr.next().?.items);
         try std.testing.expect(itr.next() == null);
     }
     {
         const string = "Call us today at 123-456-7890 or 9876543210 to say hi!";
         var itr = Fluent.match("\\d{3}-?\\d{3}-?\\d{4}", string);
-        try std.testing.expectEqualSlices(u8, "123-456-7890", itr.next() orelse unreachable);
-        try std.testing.expectEqualSlices(u8, "9876543210", itr.next() orelse unreachable);
+        try std.testing.expectEqualSlices(u8, "123-456-7890", itr.next().?.items);
+        try std.testing.expectEqualSlices(u8, "9876543210", itr.next().?.items);
         try std.testing.expect(itr.next() == null);
     }
     {
@@ -4164,10 +4180,10 @@ test "regex-engine38                            : match iterator-> regex" {
             "great stock tip: \"I like turtles\"";
             
         var itr = Fluent.match("[sS]tock\\s{0,3}tips?: \"[^\"]+\"", string);
-        try std.testing.expectEqualSlices(u8, "Stock  tip: \"buy dog food\"", itr.next() orelse unreachable);
-        try std.testing.expectEqualSlices(u8, "stock\ttips: \"Why bother\"", itr.next() orelse unreachable);
-        try std.testing.expectEqualSlices(u8, "Stock   tips: \"get a job\"", itr.next() orelse unreachable);
-        try std.testing.expectEqualSlices(u8, "stock tip: \"I like turtles\"", itr.next() orelse unreachable);
+        try std.testing.expectEqualSlices(u8, "Stock  tip: \"buy dog food\"", itr.next().?.items);
+        try std.testing.expectEqualSlices(u8, "stock\ttips: \"Why bother\"", itr.next().?.items);
+        try std.testing.expectEqualSlices(u8, "Stock   tips: \"get a job\"", itr.next().?.items);
+        try std.testing.expectEqualSlices(u8, "stock tip: \"I like turtles\"", itr.next().?.items);
         try std.testing.expect(itr.next() == null);
     }
 }
