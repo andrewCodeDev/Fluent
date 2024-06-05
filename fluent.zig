@@ -515,11 +515,9 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
         /// print - prints the acquired slice based on a given format string
         pub fn print(self: Self, comptime print_format: []const u8) Self {
             // this is intended to work similarly to std.log.info
-            const stderr = std.io.getStdErr();
-            defer stderr.close();
-            const writer = stderr.writer();
-            std.debug.getStderrMutex().lock();
-            defer std.debug.getStderrMutex().unlock();
+            std.debug.lockStdErr();
+            defer std.debug.unlockStdErr();
+            const writer = std.io.getStdErr().writer();
             writer.print(print_format, .{self.items}) catch {};
             return self;
         }    
@@ -1386,6 +1384,63 @@ fn MutableStringBackend(comptime Self: type) type {
             return self;
         }
 
+        /// replaces values in string with a provided string.
+        /// Panics if the replacement string size is larger than 
+        /// the minimum number of possible matches.
+        pub fn replace(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+            replacement: Parameter(u8, mode),
+        ) Self {
+            if (self.items.len == 0) return self;
+            
+            switch (mode) {
+                .scalar => { 
+                    std.mem.replaceScalar(u8, self.items, needle, replacement);
+                    return self;
+                },
+                .regex => {
+                    const tree = comptime ParseRegexTree(needle);
+                    const min_matches = comptime tree.minMatches();
+
+                    if (comptime min_matches == 0) 
+                        @compileError("replacment matches must be greater than zero");
+
+                    if (replacement.len > min_matches)
+                        @panic("replacement string length must be less than or equal to minimum possible regex match.");
+
+                    var r: usize = 0; // read
+                    var w: usize = 0; // write
+
+                    while (r < self.items.len) {
+
+                        if (tree.call(self.items, r, false)) |match_end| {
+
+                            if (r == match_end) {
+                                r += 1;
+                                continue;
+                            }
+                            // copy from where the write head starts
+                            @memcpy(self.items[w..][0..replacement.len], replacement);
+                            // advance write head by size of replacement
+                            w += replacement.len;
+                            // start next read at last match's end
+                            r = match_end;
+
+                            continue;
+                        }
+                        
+                        self.items[w] = self.items[r];
+                        r += 1;
+                        w += 1;
+                    }
+
+                    return .{ .items = self.items[0..w] };
+                }
+            }
+        }
+
         /// capitalize - transform first character to upper case and rest to lower case
         pub fn capitalize(self: Self) Self {
             if (self.items.len > 0)
@@ -2058,12 +2113,27 @@ fn pipeSearch(
     return i;
 }
 
+
+// TODO:
+//  Consider only using this for alternation branches and make
+//  a special character set branch that takes in a substring
+//  instead of parsing one character at a time.
+
 fn RegexOR(
     // used for "|" or [abc] clauses
     comptime lhs: type,
     comptime rhs: type,
 ) type {
     return struct {
+
+        pub fn minMatches() usize {
+            if (comptime @hasDecl(rhs, "minMatches")) {
+                return @min(lhs.minMatches(), rhs.minMatches());
+            } else {
+                return lhs.minMatches();
+            }
+        }
+        
         pub fn call(str: []const u8, i: usize, prev: bool) ?usize {
             if (comptime @hasDecl(rhs, "call")) {
                 return lhs.call(str, i, prev) orelse rhs.call(str, i, prev);
@@ -2075,11 +2145,29 @@ fn RegexOR(
 }
 
 fn RegexAND(
-    // used for anything outside of [] clauses,
     comptime lhs: type,
     comptime rhs: type,
 ) type {
     return struct {
+
+        pub fn minMatches() usize {
+            const matches: usize = blk: {
+                const q = lhs.quantifier orelse break :blk 1;
+                break :blk switch (q) {
+                    .any => 0,
+                    .exact => |n| n,
+                    .between => |b| b.start,
+                    .one_or_more => 1,
+                    .optional => 0,
+                };
+            };
+            if (comptime @hasDecl(rhs, "minMatches")) {
+                return @max(matches + rhs.minMatches(), 1);
+            } else {
+                return @max(matches, 1);
+            }
+        }
+
         pub fn call(str: []const u8, i: usize, prev: bool) ?usize {
 
             // NOTE:
@@ -2213,14 +2301,17 @@ fn RegexAND(
 fn RegexNAND(
     // only used for [^abc] type clauses,
     // should only appear in that context
-    comptime this: type,
-    comptime next: type,
+    comptime lhs: type,
+    comptime rhs: type,
 ) type {
     return struct {
+        pub fn minMatches() usize {
+            return 1; // NAND can only connect to other NANDs
+        }
         pub fn call(str: []const u8, i: usize, prev: bool) ?usize {
-            const j = this.call(str, i, prev) orelse return null;
-            if (comptime @hasDecl(next, "call")) {
-                return next.call(str, i, prev);
+            const j = lhs.call(str, i, prev) orelse return null;
+            if (comptime @hasDecl(rhs, "call")) {
+                return rhs.call(str, i, prev);
             } else {
                 return j;
             }
@@ -2235,6 +2326,9 @@ fn RegexLookAhead(
     comptime positive: bool,
 ) type {
     return struct {
+        pub fn minMatches() usize {
+            return 0; // only precedes or follows a match
+        }
         pub inline fn call(str: []const u8, i: usize, prev: bool) ?usize {
             if (comptime @hasDecl(this, "call")) {
                 if (comptime positive) {
@@ -2410,7 +2504,6 @@ fn ParseRegexTreeDepth(
     comptime enclosing: u8,
 ) type {
     comptime {
-        const tag = std.meta.activeTag;
 
         if (sq.len == 0)
             return struct {}; // terminal node
@@ -2431,13 +2524,13 @@ fn ParseRegexTreeDepth(
                     const T: type = blk: {
                         if (closing > 2 and s.char == '(') {
 
-                            if (tag(_sq[1]) != .q or tag(_sq[2]) != .s) {
+                            if (_sq[1] != .q or _sq[2] != .s) {
                                 break :blk ParseRegexTreeBreadth(sq[1..closing], s.char);                                
                             }
                             const t = _sq[1].q;
                             const u = _sq[2].s;
 
-                            if (tag(t) == .optional) {
+                            if (t == .optional) {
                                 if (u.char == '=' and !u.escaped) { // (?=
                                     break :blk RegexLookAhead(ParseRegexTreeBreadth(sq[3..closing], s.char), true);
                                 }
@@ -2469,7 +2562,7 @@ fn ParseRegexTreeDepth(
                 use_nand = s.negated and s.in_square;
 
                 // implements [a-z] character spans...
-                if (_sq.len >= 3 and s.in_square and tag(_sq[1]) == .s and tag(_sq[2]) == .s) {
+                if (_sq.len >= 3 and s.in_square and _sq[1] == .s and _sq[2] == .s) {
                     const t = _sq[1].s;
                     const u = _sq[2].s;
                     if (t.char == '-' and !t.escaped and u.in_square) {
@@ -2525,6 +2618,10 @@ fn ParseRegexTreeDepth(
             },
             .q => @compileError("ParseRegexTreeRecursive: head quantifier"),
         };
+
+        // TODO:
+        //  Currently, OR branches get embedded inside at least one AND.
+        //  Consider flattening this and going directly to OR branch instead.
 
         if (use_nand) {
             return RegexNAND(Node, ParseRegexTreeDepth(_sq, enclosing));
@@ -4186,4 +4283,36 @@ test "regex-engine38                            : match iterator-> regex" {
         try std.testing.expectEqualSlices(u8, "stock tip: \"I like turtles\"", itr.next().?.items);
         try std.testing.expect(itr.next() == null);
     }
+}
+
+test "regex-engine39                            : fluent interface-> replace regex" {
+    var buf: [100]u8 = undefined;
+
+    try std.testing.expect(
+        Fluent.init(buf[0..])
+        .copy("This is a test test test string.")
+        .replace(.regex, "test", "cow")
+        .equal("This is a cow cow cow string.")
+    );
+
+    try std.testing.expect(
+        Fluent.init(buf[0..])
+        .copy("This is a test test test string.")
+        .replace(.regex, "t\\w{2,4}(?= )", "cow")
+        .equal("This is a cow cow cow string.")
+    );
+
+    try std.testing.expect(
+        Fluent.init(buf[0..])
+        .copy("qaaq aa a aaa aba a")
+        .replace(.regex, "a?a", "x")
+        .equal("qxq x x xx xbx x")
+    );
+
+    try std.testing.expect(
+        Fluent.init(buf[0..])
+        .copy("qaaq aa a aaa aba a")
+        .replace(.regex, " ?a?a ?", "")
+        .equal("qqb")
+    );
 }
