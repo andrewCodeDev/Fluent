@@ -1911,7 +1911,7 @@ fn fuseQuantifiers(
     comptime es: []const RegexEscaped,
 ) []const RegexSymbol {
     comptime {
-        @setEvalBranchQuota(2147463647);
+        @setEvalBranchQuota(200_000);
         if (isRegexQuantifier(es[0])) {
             @compileError("fuseQuantifiers: 0th symbol cannot be a quanitifier");
         }
