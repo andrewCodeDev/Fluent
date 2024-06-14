@@ -1407,8 +1407,7 @@ fn MutableStringBackend(comptime Self: type) type {
                     if (comptime min_matches == 0) 
                         @compileError("replacment matches must be greater than zero");
 
-                    if (replacement.len > min_matches)
-                        @panic("replacement string length must be less than or equal to minimum possible regex match.");
+                    std.debug.assert(replacement.len <= min_matches);
 
                     var r: usize = 0; // read
                     var w: usize = 0; // write
