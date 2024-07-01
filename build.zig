@@ -30,5 +30,9 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(lib);
 
     // Export as module to be available for @import("Fluent") on user site
-    _ = b.addModule("Fluent", .{ .root_source_file = b.path("fluent.zig") });
+    _ = b.addModule("Fluent", .{
+        .root_source_file = b.path("fluent.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 }
