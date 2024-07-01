@@ -28,4 +28,7 @@ pub fn build(b: *std.Build) void {
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).
     b.installArtifact(lib);
+
+    // Export as module to be available for @import("Fluent") on user site
+    _ = b.addModule("Fluent", .{ .root_source_file = b.path("fluent.zig") });
 }
