@@ -1,0 +1,11 @@
+.{
+    .name = "Fluent",
+    .version = "2.1.0",
+    .paths = .{
+        "fluent.zig",
+        "LICENSE",
+        "README.md",
+        "build.zig.zon",
+        "build.zig",
+    },
+}
