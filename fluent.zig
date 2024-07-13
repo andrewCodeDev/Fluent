@@ -2178,8 +2178,8 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
 
             while (i < symbols.len) {
 
-                if (isCharFunction(symbols[i].s.char) and symbols[i].s.negated) {
-                    func_set[func_len] = symbols[i].char;
+                if (isCharFunction(symbols[i].s.char) and symbols[i].s.escaped) {
+                    func_set[func_len] = symbols[i].s.char;
                     func_len += 1;
                     i += 1;
                     continue;
@@ -2205,7 +2205,7 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
                 i += 1;
             }
 
-            break :blk Self.SetImpl(char_len, span_len) {
+            break :blk Self.SetImpl(char_len, span_len, func_len) {
                 .char_set = char_set[0..char_len].*,
                 .span_set = span_set[0..span_len].*,
                 .func_set = func_set[0..func_len].*,
@@ -2215,41 +2215,64 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
         // the entire character set is negated as a set
         const negated = symbols[0].s.negated;
 
-        fn checkFunc(str: []const u8, i: usize) ?usize {
+        fn checkFunc(str: []const u8, i: usize) bool {
+
+            if (comptime Self.impl.func_set.len == 0)
+                return false;
+
+            // negation must be handled as a group - do not pass
+            // the negation flag to the char function.
 
             inline for (0..Self.impl.func_set.len) |f| {
-                if (charFunction(Self.impl.func_set[f], negate, str, i)) |j| return j;
+                if (charFunction(Self.impl.func_set[f], false, str, i) != null) return true;
             }
-            return null;
+            return false;
         }
 
-        fn checkChar(c: u8) bool {
+        fn checkChar(str: []const u8, i: usize) bool {
+
             if (comptime Self.impl.char_set.len == 0)
                 return false;
             
-            return std.mem.indexOfScalar(u8, Self.impl.char_set[0..], c) != null;
+            return std.mem.indexOfScalar(u8, Self.impl.char_set[0..], str[i]) != null;
         }
 
-        fn checkSpan(c: u8) bool {
+        fn checkSpan(str: []const u8, i: usize) bool {
+
             if (comptime Self.impl.span_set.len == 0)
                 return false;
 
-            var i: usize = 0;
-            while (i < Self.impl.span_set.len) : (i += 2) {
-                if (Self.impl.span_set[i] <= c and c <= Self.impl.span_set[i + 1])
+            const c = str[i];
+
+            var n: usize = 0;
+
+            while (n < Self.impl.span_set.len) : (n += 2) {
+                if (Self.impl.span_set[n] <= c and c <= Self.impl.span_set[n + 1])
                     return true;
             }
             return false;
         }
 
         pub fn call(str: []const u8, i: usize, _: bool) ?usize {
-            return checkFunc(str, i) orelse {
-                if (comptime !Self.negated) {
-                    return if (checkChar(str[i]) or checkSpan(str[i])) i + 1 else null;
-                } else {
-                    return if (checkChar(str[i]) or checkSpan(str[i])) null else i + 1;
-                }
-            };
+            if (i == str.len) return null;
+
+            // Character sets in PCRE do not respect zero-length
+            // matches. It looks like they always increment by 1.
+            // This means that things [\b]w+ will not match like
+            // \b\w+ like one would expect. 
+
+            if (comptime !Self.negated) {
+                if (checkChar(str, i)) return i + 1;                            
+                if (checkSpan(str, i)) return i + 1;
+                if (checkFunc(str, i)) return i + 1;
+                return null;
+            } else {
+                const b = checkChar(str, i) or
+                          checkSpan(str, i) or
+                          checkFunc(str, i);                
+
+                return if (!b) i + 1 else null;
+            }
         }
     };
 }
@@ -2458,20 +2481,26 @@ fn RegexUnit(
 //        Character Matching Functions          //
 //////////////////////////////////////////////////
 
-fn equalRegex(comptime char: u8) fn (u8) bool {
-    return struct { pub fn call(c: u8) bool { return c == char; } }.call;
+// TODO: consider moving into the charFunction call while parsing
+fn equalRegex(comptime char: u8) fn ([]const u8, i: usize) ?usize {
+    return struct { pub fn call(str: []const u8, i: usize) ?usize { 
+        return if (i < str.len and str[i] == char) i + 1 else null; } 
+    }.call;
 }
 
+// TODO: consider moving into the charFunction call while parsing
 fn startsWithRegex(str: []const u8, i: usize) ?usize {
     return if (str.len > 0 and i == 0) i else null;
 }
 
+// TODO: consider moving into the charFunction call while parsing
 fn endsWithRegex(str: []const u8, i: usize) ?usize {
     return if (str.len > 0 and i == str.len) i else null;
 }
 
-fn anyRegex(_: []const u8, _: usize) bool {        
-    return true;
+// TODO: consider moving into the charFunction call while parsing
+fn anyRegex(_: []const u8, i: usize) ?usize {        
+    return i + 1;
 }
 
 fn isWordCharacter(c: u8) bool {
@@ -2506,6 +2535,9 @@ fn isWordBoundary(str: []const u8, i: usize) bool {
     if (i == 0)
         return true;
 
+    if (i + 1 == str.len)
+        return true;
+
     return isWordCharacter(str[i + 1]);
 }
 
@@ -2518,7 +2550,12 @@ pub fn isZeroLength(comptime c: u8) bool {
 
 fn isCharFunction(comptime char: u8) bool {
     return switch (char) {
-        'w','W','d', 'D','s','S','h','H','v','V' => true,
+        'w', 'W',
+        'd', 'D',
+        's', 'S',
+        'h', 'H',
+        'v', 'V', 
+        'b', 'B' => true,
         else => false,
     };
 }
@@ -2530,8 +2567,7 @@ fn charFunction(
     i: usize,
 ) ?usize {
 
-    // negate result if the character is capitalized
-    const is_low: bool = comptime std.ascii.isLower(char);
+    const c = comptime if (negated) negateChar(char) else char;
     
     return blk: {
 
@@ -2541,16 +2577,13 @@ fn charFunction(
             // and always return i as their match, hence
             // "zero-length" match.
             
-            const b: bool = switch (comptime char) {
-                'b', 'B' => isWordBoundary(str, i),
+            const b: bool = switch (comptime c) {
+                'b' => isWordBoundary(str, i),
+                'B' => !isWordBoundary(str, i),
                 else => @compileError("Invalid character"),
             };
 
-            if (comptime negated) {
-                break :blk if (b != is_low) i else null;
-            } else {
-                break :blk if (b == is_low) i else null;
-            }
+            break :blk if (b) i else null;
 
         } else {
 
@@ -2560,20 +2593,21 @@ fn charFunction(
             if (i == str.len) 
                 return null;
             
-            const b: bool = switch (comptime char) {
-                'w', 'W' => isWordCharacter(str[i]),
-                'd', 'D' => std.ascii.isDigit(str[i]),
-                's', 'S' => std.ascii.isWhitespace(str[i]),
-                'h', 'H' => isHorizontalWhitespace(str[i]),
-                'v', 'V' => isVerticalWhitespace(str[i]),
+            const b: bool = switch (comptime c) {
+                'w' => isWordCharacter(str[i]),
+                'W' => !isWordCharacter(str[i]),
+                'd' => std.ascii.isDigit(str[i]),
+                'D' => !std.ascii.isDigit(str[i]),
+                's' => std.ascii.isWhitespace(str[i]),
+                'S' => !std.ascii.isWhitespace(str[i]),
+                'h' => isHorizontalWhitespace(str[i]),
+                'H' => !isHorizontalWhitespace(str[i]),
+                'v' => isVerticalWhitespace(str[i]),
+                'V' => !isVerticalWhitespace(str[i]),
                 else => @compileError("Invalid character"),
             };
 
-            if (comptime negated) {
-                break :blk if (b != is_low) i + 1 else null;
-            } else {
-                break :blk if (b == is_low) i + 1 else null;
-            }
+            break :blk if (b) i + 1 else null;
         }
     };
 }
@@ -2581,7 +2615,7 @@ fn charFunction(
 pub fn BindCharFunction(
     comptime char: u8,    
     comptime negated: bool,
-) fn([]const u8, usize) ?usize {
+) fn([]const u8, usize) callconv(.Inline) ?usize {
     return struct {
         pub inline fn call(str: []const u8, i: usize) ?usize {
             return charFunction(char, negated, str, i);
@@ -2589,14 +2623,18 @@ pub fn BindCharFunction(
     }.call;
 }
 
+pub fn negateChar(comptime c: u8) u8 {
+    if (std.ascii.isLower(c)) {
+        return std.ascii.toUpper(c);
+    }
+    return std.ascii.toLower(c);
+}
+
 ////////////////////////////////////////////
 //        Tree Parsing Functions          //
 ////////////////////////////////////////////
 
-fn ParseRegexTreeBreadth(
-    comptime sq: []const RegexSymbol,
-    comptime enclosing: u8,
-) type {
+fn ParseRegexTreeBreadth(comptime sq: []const RegexSymbol) type {
     comptime {
         if (sq.len == 0)
             return struct {}; // terminal node
@@ -2605,19 +2643,17 @@ fn ParseRegexTreeBreadth(
 
         if (pipe < sq.len) {
             return RegexOR(
-                ParseRegexTreeBreadth(sq[0..pipe], enclosing),
-                ParseRegexTreeBreadth(sq[pipe + 1 ..], enclosing),
+                ParseRegexTreeBreadth(sq[0..pipe]),
+                ParseRegexTreeBreadth(sq[pipe + 1 ..]),
             );
         } else {
-            return ParseRegexTreeDepth(sq, enclosing);
+            return ParseRegexTreeDepth(sq);
         }
     }
 }
 
-fn ParseRegexTreeDepth(
-    comptime sq: []const RegexSymbol,
-    comptime enclosing: u8,
-) type {
+fn ParseRegexTreeDepth(comptime sq: []const RegexSymbol) type {
+
     comptime {
 
         if (sq.len == 0)
@@ -2646,23 +2682,23 @@ fn ParseRegexTreeDepth(
                         if (closing > 2 and s.char == '(') {
 
                             if (_sq[1] != .q or _sq[2] != .s) {
-                                break :sub ParseRegexTreeBreadth(sq[1..closing], s.char);                                
+                                break :sub ParseRegexTreeBreadth(sq[1..closing]);                                
                             }
                             const t = _sq[1].q;
                             const u = _sq[2].s;
 
                             if (t == .optional) {
                                 if (u.char == '=' and !u.escaped) { // (?=
-                                    break :sub RegexLookAhead(ParseRegexTreeBreadth(sq[3..closing], s.char), true);
+                                    break :sub RegexLookAhead(ParseRegexTreeBreadth(sq[3..closing]), true);
                                 }
                                 if (u.char == '!' and !u.escaped) { // (?!
-                                    break :sub RegexLookAhead(ParseRegexTreeBreadth(sq[3..closing], s.char), false);
+                                    break :sub RegexLookAhead(ParseRegexTreeBreadth(sq[3..closing]), false);
                                 }
                             }
                         }
 
                         // parse everything between the brackets
-                        break :sub ParseRegexTreeBreadth(sq[1..closing], s.char);
+                        break :sub ParseRegexTreeBreadth(sq[1..closing]);
                     };
 
                     // the entire automaton can be quantified
@@ -2709,27 +2745,19 @@ fn ParseRegexTreeDepth(
                 }
 
                 // default to direct equals
-                break :outer RegexUnit(invertRegex(true, s.negated, equalRegex(s.char)), q);
+                break :outer RegexUnit(equalRegex(s.char), q);
             },
             .q => @compileError("ParseRegexTreeRecursive: head quantifier"),
         };
 
-        // TODO:
-        //  Currently, OR branches get embedded inside at least one AND.
-        //  Consider flattening this and going directly to OR branch instead.
-
-        if (enclosing == '(') {
-            return RegexAND(Node, ParseRegexTreeDepth(_sq, enclosing));
-        } else {
-            return RegexOR(Node, ParseRegexTreeDepth(_sq, enclosing));
-        }
+        return RegexAND(Node, ParseRegexTreeDepth(_sq));
     }
 }
 
 fn ParseRegexTree(
     comptime expression: []const u8,
 ) type {
-    return comptime ParseRegexTreeBreadth(fuseQuantifiers(fuseEscapes(expression)), '(');
+    return comptime ParseRegexTreeBreadth(fuseQuantifiers(fuseEscapes(expression)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
