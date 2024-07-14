@@ -108,6 +108,21 @@ pub fn MatchIterator(
             }
             return null;
         }
+
+        pub fn span(self: *Self) ?struct{ pos: usize, end: usize } {
+            while (self.index < self.items.len) : (self.index += 1) {
+                if (tree.call(self.items, self.index, false)) |last| {
+
+                    // non-advancing calls
+                    if (self.index == last) 
+                        continue;
+
+                    defer self.index = last;
+                    return .{ .pos = self.index, .end = last };
+                }
+            }
+            return null;
+        }
     };
 }
 
@@ -148,6 +163,26 @@ fn SplitIterator(comptime expression: []const u8) type {
             };
             defer self.index = end;
             return Fluent.init(self.items[start..stop]);
+        }
+
+        pub fn span(self: *Self) struct{ pos: usize, end: usize } {
+            const start = self.index orelse return null;
+            var stop: usize = start;
+            const end: ?usize = blk: {
+                while (stop < self.items.len) : (stop += 1) {
+
+                    const last = tree.call(self.items, stop, false) orelse continue;
+
+                    // non-advancing calls
+                    if (start == last)
+                        continue;
+
+                    break :blk last;
+                    
+                } else break :blk null;
+            };
+            defer self.index = end;
+            return .{ .pos = start, .end = stop };
         }
     };
 }
@@ -1060,8 +1095,8 @@ fn ImmutableStringBackend(comptime Self: type) type {
         /// float - parses the string as a floating-point number
         pub fn cast(self: Self, comptime T: type) !T {
             return switch (@typeInfo(T)) {
-                .Int, .ComptimeInt => self.digit(),
-                .Float, .ComptimeFloat => self.float(),
+                .Int => self.digit(T),
+                .Float => self.float(T),
                 else => @compileError("cast: requires floating point or integer types.")
             };
         }
@@ -2522,23 +2557,25 @@ fn isHorizontalWhitespace(c: u8) bool {
 }
 
 fn isWordBoundary(str: []const u8, i: usize) bool {
-
-    if (str.len == 0)
-        return false;
     
     if (i == str.len)
         return isWordCharacter(str[i - 1]);
 
-    if (!isWordCharacter(str[i])) 
-        return false;
-
-    if (i == 0)
+    if (i == 0 and isWordCharacter(str[i])) 
         return true;
 
-    if (i + 1 == str.len)
+    if ((i + 1) == str.len and isWordCharacter(str[i]))
         return true;
 
-    return isWordCharacter(str[i + 1]);
+    // character, check boundary behind
+    if (isWordCharacter(str[i]) and !isWordCharacter(str[i - 1]))
+        return true;
+
+    // character, check boundary behind
+    if (!isWordCharacter(str[i]) and isWordCharacter(str[i - 1]))
+        return true;
+
+    return false;
 }
 
 pub fn isZeroLength(comptime c: u8) bool {
@@ -3860,6 +3897,14 @@ test "string integer and float parsing          : ConstSelf" {
         const result = init("42.5").float(f64) catch unreachable;
         try expect(result < 43.0);
     }
+    {
+        const result = init("42").cast(usize) catch unreachable;
+        try expect(result == 42);
+    }
+    {
+        const result = init("42.5").cast(f64) catch unreachable;
+        try expect(result < 43.0);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4436,4 +4481,17 @@ test "regex-engine39                            : fluent interface-> replace reg
         .replace(.regex, " ?a?a ?", "")
         .equal("qqb")
     );
+}
+
+test "regex-engine40                            : fluent interface-> word boundary" {
+    const expr = "\\bWord\\b";
+    const string = "WordWordWord Word WordWord";
+    var itr = match(expr, string);
+
+    const s = itr.span() orelse unreachable;
+    
+    try testing.expectEqual(13, s.pos);
+    try testing.expectEqual(17, s.end);
+    try testing.expect(itr.span() == null);
+    try testing.expectEqualSlices(u8, string[s.pos..s.end], "Word");
 }
