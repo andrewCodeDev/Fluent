@@ -307,7 +307,7 @@ fn IteratorInterface(
             if (comptime @TypeOf(filters) != void) {
                 // apply single filter or tuple of filters
                 switch (comptime @typeInfo(@TypeOf(filters))) {
-                    .Fn => {
+                    .@"fn" => {
                         if (comptime Mode == .forward) {
                             while (self.ptr < self.end and !filters(self.ptr.*))
                                 self.ptr += self.stride;
@@ -337,7 +337,7 @@ fn IteratorInterface(
             }
 
             // unpack transforms into single transform call
-            const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .Fn)
+            const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .@"fn")
                 transforms
             else
                 Fluent.Chain(transforms).call;
@@ -601,7 +601,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             comptime binary_func: anytype,
             initial: reduce_type,
         ) reduce_type {
-            const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
+            const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .@"fn")
                 unary_func
             else
                 Chain(unary_func).call;
@@ -1095,8 +1095,8 @@ fn ImmutableStringBackend(comptime Self: type) type {
         /// float - parses the string as a floating-point number
         pub fn cast(self: Self, comptime T: type) !T {
             return switch (@typeInfo(T)) {
-                .Int => self.digit(T),
-                .Float => self.float(T),
+                .int => self.digit(T),
+                .float => self.float(T),
                 else => @compileError("cast: requires floating point or integer types.")
             };
         }
@@ -1648,35 +1648,35 @@ const FluentMode = std.mem.DelimiterType;
 
 fn isConst(comptime T: type) bool {
     switch (@typeInfo(T)) {
-        .Pointer => |ptr| return ptr.is_const,
+        .pointer => |ptr| return ptr.is_const,
         else => @compileError("Type must coercible to a slice."),
     }
 }
 
 fn isSlice(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Pointer => |ptr| ptr.size == .Slice,
+        .pointer => |ptr| ptr.size == .Slice,
         else => false,
     };
 }
 
 fn isInteger(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Int, .ComptimeInt => true,
+        .int, .comptime_int => true,
         else => false,
     };
 }
 
 fn isUnsigned(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Int => |i| i.signedness == .unsigned,
+        .int => |i| i.signedness == .unsigned,
         else => false,
     };
 }
 
 fn tupleSize(comptime tuple: anytype) usize {
     return switch (@typeInfo(@TypeOf(tuple))) {
-        .Struct => |s| s.fields.len,
+        .@"struct" => |s| s.fields.len,
         else => @compileError("type must be a tuple"),
     };
 }
@@ -1695,7 +1695,7 @@ inline fn identity(x: anytype) @TypeOf(x) {
 
 fn isFloat(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Float => true,
+        .float => true,
         else => false,
     };
 }
@@ -1719,15 +1719,15 @@ fn DeepChild(comptime T: type) type {
     const C = Child(T);
 
     return switch (@typeInfo(C)) {
-        .Int, .Float => C,
-        .Array => |a| a.child,
+        .int, .float => C,
+        .array => |a| a.child,
         else => @compileError("Unsupported Type"),
     };
 }
 
 inline fn wrapIndex(len: usize, idx: anytype) usize {
     switch (@typeInfo(@TypeOf(idx))) {
-        .Int => |i| {
+        .int => |i| {
             if (comptime i.signedness == .unsigned) {
                 return idx;
             } else {
@@ -1735,7 +1735,7 @@ inline fn wrapIndex(len: usize, idx: anytype) usize {
                 return if (idx < 0) len - u else u;
             }
         },
-        .ComptimeInt => {
+        .comptime_int => {
             const u: usize = comptime @abs(idx);
             return if (comptime idx < 0) len - u else u;
         },
@@ -1749,11 +1749,11 @@ inline fn reduceInit(comptime op: ReduceOp, comptime T: type) T {
     return switch (op) {
         .Add => 0, // implicit cast
         .Mul => 1, // implicit cast
-        .Min => if (comptime info == .Int)
+        .Min => if (comptime info == .int)
             math.maxInt(T)
         else
             math.inf(T),
-        .Max => if (comptime info == .Int)
+        .Max => if (comptime info == .int)
             math.minInt(T)
         else
             -math.inf(T),
@@ -2501,7 +2501,7 @@ fn RegexUnit(
         pub const quantifier = Quantifier;
         pub const info = @typeInfo(@TypeOf(callable));
         pub inline fn call(str: []const u8, i: usize, prev: bool) ?usize {
-            if (comptime info == .Fn) {
+            if (comptime info == .@"fn") {
                 // terminal function call..
                 return callable(str, i);
             } else {
