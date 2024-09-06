@@ -2767,17 +2767,20 @@ fn ParseRegexTreeDepth(comptime sq: []const RegexSymbol) type {
                 if (s.escaped and isCharFunction(s.char)) {
                     break :outer RegexUnit(BindCharFunction(s.char, s.negated), q);
                 } else {
-                    switch (s.char) {
-                        '.' => break :outer RegexUnit(anyRegex, q),
-                        '^' => { 
-                            if (q != null) @compileError("Symbol '^' cannot have a quantifier.");
-                            break :outer RegexUnit(startsWithRegex, null);
-                        },
-                        '$' => { 
-                            if (q != null) @compileError("Symbol '$' cannot have a quantifier.");
-                            break :outer RegexUnit(endsWithRegex, null);
-                        },
-                        else => {},
+
+                    if (!s.escaped) {
+                        switch (s.char) {
+                            '.' => break :outer RegexUnit(anyRegex, q),
+                            '^' => { 
+                                if (q != null) @compileError("Symbol '^' cannot have a quantifier.");
+                                break :outer RegexUnit(startsWithRegex, null);
+                            },
+                            '$' => { 
+                                if (q != null) @compileError("Symbol '$' cannot have a quantifier.");
+                                break :outer RegexUnit(endsWithRegex, null);
+                            },
+                            else => {},
+                        }
                     }
                 }
 
