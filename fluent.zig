@@ -6,6 +6,33 @@ const math = std.math;
 // name disambiguation
 const Fluent = @This();
 
+// This is the new reference for the Enum Type
+// pub const Type = union(enum) {
+//     type: void,
+//     void: void,
+//     bool: void,
+//     noreturn: void,
+//     int: Int,
+//     float: Float,
+//     pointer: Pointer,
+//     array: Array,
+//     @"struct": Struct,
+//     comptime_float: void,
+//     comptime_int: void,
+//     undefined: void,
+//     null: void,
+//     optional: Optional,
+//     error_union: ErrorUnion,
+//     error_set: ErrorSet,
+//     @"enum": Enum,
+//     @"union": Union,
+//     @"fn": Fn,
+//     @"opaque": Opaque,
+//     frame: Frame,
+//     @"anyframe": AnyFrame,
+//     vector: Vector,
+//     enum_literal: void,
+
 ////////////////////////////////////////////////////////////////////////////////
 // Public Fluent Interface Access Point                                      ///
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,10 +96,14 @@ pub fn iterator(
     const P = [*c]const T;
 
     const ptr: P = if (comptime mode == .forward)
-        @as(P, @ptrCast(items.ptr)) else (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
+        @as(P, @ptrCast(items.ptr))
+    else
+        (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
 
     const end: P = if (comptime mode == .forward)
-        @as(P, @ptrCast(items.ptr)) + items.len else @as(P, @ptrCast(items.ptr)) - 1;
+        @as(P, @ptrCast(items.ptr)) + items.len
+    else
+        @as(P, @ptrCast(items.ptr)) - 1;
 
     return .{
         .ptr = ptr,
@@ -99,7 +130,7 @@ pub fn MatchIterator(
                 if (tree.call(self.items, self.index, false)) |last| {
 
                     // non-advancing calls
-                    if (self.index == last) 
+                    if (self.index == last)
                         continue;
 
                     defer self.index = last;
@@ -109,12 +140,12 @@ pub fn MatchIterator(
             return null;
         }
 
-        pub fn span(self: *Self) ?struct{ pos: usize, end: usize } {
+        pub fn span(self: *Self) ?struct { pos: usize, end: usize } {
             while (self.index < self.items.len) : (self.index += 1) {
                 if (tree.call(self.items, self.index, false)) |last| {
 
                     // non-advancing calls
-                    if (self.index == last) 
+                    if (self.index == last)
                         continue;
 
                     defer self.index = last;
@@ -150,7 +181,6 @@ fn SplitIterator(comptime expression: []const u8) type {
             var stop: usize = start;
             const end: ?usize = blk: {
                 while (stop < self.items.len) : (stop += 1) {
-
                     const last = tree.call(self.items, stop, false) orelse continue;
 
                     // non-advancing calls
@@ -158,19 +188,17 @@ fn SplitIterator(comptime expression: []const u8) type {
                         continue;
 
                     break :blk last;
-                    
                 } else break :blk null;
             };
             defer self.index = end;
             return Fluent.init(self.items[start..stop]);
         }
 
-        pub fn span(self: *Self) struct{ pos: usize, end: usize } {
+        pub fn span(self: *Self) struct { pos: usize, end: usize } {
             const start = self.index orelse return null;
             var stop: usize = start;
             const end: ?usize = blk: {
                 while (stop < self.items.len) : (stop += 1) {
-
                     const last = tree.call(self.items, stop, false) orelse continue;
 
                     // non-advancing calls
@@ -178,7 +206,6 @@ fn SplitIterator(comptime expression: []const u8) type {
                         continue;
 
                     break :blk last;
-                    
                 } else break :blk null;
             };
             defer self.index = end;
@@ -236,7 +263,7 @@ pub fn bind(
     comptime function: anytype,
 ) BindRetun(bind_tuple, function) {
     const bind_count = comptime tupleSize(bind_tuple);
-    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
+    const total_count = comptime @typeInfo(@TypeOf(function)).@"fn".params.len;
 
     if (comptime total_count - bind_count == 1) {
         return struct {
@@ -257,7 +284,7 @@ fn BindRetun(
     comptime bind_tuple: anytype,
     comptime function: anytype,
 ) type {
-    const total_count = comptime @typeInfo(@TypeOf(function)).Fn.params.len;
+    const total_count = comptime @typeInfo(@TypeOf(function)).@"fn".params.len;
     const bind_count = comptime tupleSize(bind_tuple);
 
     if (comptime total_count < bind_count)
@@ -307,7 +334,7 @@ fn IteratorInterface(
             if (comptime @TypeOf(filters) != void) {
                 // apply single filter or tuple of filters
                 switch (comptime @typeInfo(@TypeOf(filters))) {
-                    .Fn => {
+                    .@"fn" => {
                         if (comptime Mode == .forward) {
                             while (self.ptr < self.end and !filters(self.ptr.*))
                                 self.ptr += self.stride;
@@ -337,7 +364,7 @@ fn IteratorInterface(
             }
 
             // unpack transforms into single transform call
-            const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .Fn)
+            const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .@"fn")
                 transforms
             else
                 Fluent.Chain(transforms).call;
@@ -546,7 +573,6 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             return (self);
         }
 
-        
         /// print - prints the acquired slice based on a given format string
         pub fn print(self: Self, comptime print_format: []const u8) Self {
             // this is intended to work similarly to std.log.info
@@ -555,8 +581,8 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             const writer = std.io.getStdErr().writer();
             writer.print(print_format, .{self.items}) catch {};
             return self;
-        }    
-    
+        }
+
         pub fn format(
             self: Self,
             comptime _: []const u8,
@@ -564,7 +590,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             writer: anytype,
         ) !void {
             const fmt: []const u8 = if (Self.DataType == u8) "{s}" else "{any}";
-            _ = try writer.print(fmt ++ "\n", .{ self.items });
+            _ = try writer.print(fmt ++ "\n", .{self.items});
         }
 
         /// sample - randomly samples a range from the acquired slice given a size
@@ -601,7 +627,7 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             comptime binary_func: anytype,
             initial: reduce_type,
         ) reduce_type {
-            const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
+            const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .@"fn")
                 unary_func
             else
                 Chain(unary_func).call;
@@ -748,8 +774,8 @@ fn ImmutableNumericBackend(comptime Self: type) type {
 
         /// count - counts all, left, right given a scalar, sequence, or any
         pub fn count(
-            self: Self, 
-            direction: DirectionOption, 
+            self: Self,
+            direction: DirectionOption,
             comptime mode: FluentMode,
             needle: Parameter(Self.DataType, mode),
         ) usize {
@@ -762,7 +788,6 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             };
         }
 
-
         /// trim - trims left, right, or all based on any, sequence, or scalar
         pub fn trim(
             self: Self,
@@ -772,12 +797,11 @@ fn ImmutableNumericBackend(comptime Self: type) type {
         ) Self {
             if (self.items.len == 0) return self;
             return switch (direction) {
-                .left  => .{ .items = self.items[trimLeft(self, option, needle)..] },
+                .left => .{ .items = self.items[trimLeft(self, option, needle)..] },
                 .right => .{ .items = self.items[0..trimRight(self, option, needle)] },
                 .all => self.trim(.left, option, needle).trim(.right, option, needle),
             };
         }
-
 
         ///////////////////////////////////////////////////
         // Iterator support ///////////////////////////////
@@ -845,12 +869,16 @@ fn ImmutableNumericBackend(comptime Self: type) type {
 
             switch (mode) {
                 .scalar => {
-                    for (self.items) |it| { if (it == needle) result += 1; }
+                    for (self.items) |it| {
+                        if (it == needle) result += 1;
+                    }
                 },
                 .sequence => result = std.mem.count(Self.DataType, self.items, needle),
                 .any => {
                     for (self.items) |it| {
-                        for (needle) |n| { if (it == n) result += 1; }
+                        for (needle) |n| {
+                            if (it == n) result += 1;
+                        }
                     }
                 },
             }
@@ -988,7 +1016,7 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
 
         /// map - transforms every elment in the acquired slice with a given unary function
         pub fn map(self: Self, unary_func: anytype) Self {
-            const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .Fn)
+            const unary_call = comptime if (@typeInfo(@TypeOf(unary_func)) == .@"fn")
                 unary_func
             else
                 Chain(unary_func).call;
@@ -1007,7 +1035,6 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
 
 fn MutableNumericBackend(comptime Self: type) type {
     return struct {
-
         pub usingnamespace ImmutableNumericBackend(Self);
 
         pub usingnamespace GeneralMutableBackend(Self);
@@ -1024,7 +1051,6 @@ const StringMode = enum { regex, scalar };
 
 fn ImmutableStringBackend(comptime Self: type) type {
     return struct {
-
         pub usingnamespace GeneralImmutableBackend(Self);
 
         ///////////////////////
@@ -1095,14 +1121,14 @@ fn ImmutableStringBackend(comptime Self: type) type {
         /// float - parses the string as a floating-point number
         pub fn cast(self: Self, comptime T: type) !T {
             return switch (@typeInfo(T)) {
-                .Int => self.digit(T),
-                .Float => self.float(T),
-                else => @compileError("cast: requires floating point or integer types.")
+                .int => self.digit(T),
+                .float => self.float(T),
+                else => @compileError("cast: requires floating point or integer types."),
             };
         }
 
         // regex returns a range
-        const RegexFindResult = struct { 
+        const RegexFindResult = struct {
             pos: usize,
             end: usize,
         };
@@ -1113,19 +1139,16 @@ fn ImmutableStringBackend(comptime Self: type) type {
             comptime mode: StringMode,
             start_index: usize,
             comptime needle: Parameter(u8, mode),
-        ) switch(mode) {
-            .scalar => ?usize, 
-            .regex => ?RegexFindResult,      
+        ) switch (mode) {
+            .scalar => ?usize,
+            .regex => ?RegexFindResult,
         } {
             return switch (mode) {
                 .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
                 .regex => blk: {
                     var itr = Fluent.match(needle, self.items[start_index..]);
                     const x = itr.next() orelse break :blk null;
-                    break :blk RegexFindResult {
-                        .pos = (itr.index - x.items.len) + start_index,
-                        .end = itr.index + start_index
-                    };  
+                    break :blk RegexFindResult{ .pos = (itr.index - x.items.len) + start_index, .end = itr.index + start_index };
                 },
             };
         }
@@ -1145,9 +1168,9 @@ fn ImmutableStringBackend(comptime Self: type) type {
             self: Self,
             comptime mode: StringMode,
             comptime needle: Parameter(u8, mode),
-        ) switch(mode) {
-            .scalar => ?usize, 
-            .regex => ?RegexFindResult,      
+        ) switch (mode) {
+            .scalar => ?usize,
+            .regex => ?RegexFindResult,
         } {
             return findFrom(self, mode, 0, needle);
         }
@@ -1170,7 +1193,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
         ) Self {
             if (self.items.len == 0) return self;
             return switch (direction) {
-                .left  => .{ .items = self.items[trimLeft(self, mode, needle)..] },
+                .left => .{ .items = self.items[trimLeft(self, mode, needle)..] },
                 .right => .{ .items = self.items[0..trimRight(self, mode, needle)] },
                 .all => self.trim(.left, mode, needle).trim(.right, mode, needle),
             };
@@ -1294,7 +1317,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
 
         fn trimRight(
             self: Self,
-            comptime mode: StringMode, 
+            comptime mode: StringMode,
             comptime needle: Parameter(u8, mode),
         ) usize {
             if (self.items.len <= 1) return 0;
@@ -1322,12 +1345,16 @@ fn ImmutableStringBackend(comptime Self: type) type {
             var result: usize = 0;
             switch (mode) {
                 .scalar => {
-                    for (self.items) |it| { if (it == needle) result += 1; }
+                    for (self.items) |it| {
+                        if (it == needle) result += 1;
+                    }
                 },
                 .regex => {
                     var itr = Fluent.match(needle, self.items);
-                    while (itr.next()) |_| { result += 1; }
-                }
+                    while (itr.next()) |_| {
+                        result += 1;
+                    }
+                },
             }
             return result;
         }
@@ -1340,7 +1367,7 @@ fn ImmutableStringBackend(comptime Self: type) type {
             return switch (mode) {
                 .scalar => blk: {
                     var index: usize = 0;
-                    while (index < self.items.len and self.items[index] == needle) { 
+                    while (index < self.items.len and self.items[index] == needle) {
                         index += 1;
                     }
                     break :blk index;
@@ -1377,7 +1404,10 @@ fn ImmutableStringBackend(comptime Self: type) type {
                     const tree = ParseRegexTree(needle);
                     var index: usize = 0;
                     var amount: usize = 0;
-                    while (true) : ({ index += 1; amount = 0; }) {
+                    while (true) : ({
+                        index += 1;
+                        amount = 0;
+                    }) {
                         while (tree.call(self.items, index, false)) |n| : (index += n) {
                             amount += 1;
                         }
@@ -1386,7 +1416,6 @@ fn ImmutableStringBackend(comptime Self: type) type {
                 },
             };
         }
-
     };
 }
 
@@ -1420,7 +1449,7 @@ fn MutableStringBackend(comptime Self: type) type {
         }
 
         /// replaces values in string with a provided string.
-        /// Panics if the replacement string size is larger than 
+        /// Panics if the replacement string size is larger than
         /// the minimum number of possible matches.
         pub fn replace(
             self: Self,
@@ -1429,9 +1458,9 @@ fn MutableStringBackend(comptime Self: type) type {
             replacement: Parameter(u8, mode),
         ) Self {
             if (self.items.len == 0) return self;
-            
+
             switch (mode) {
-                .scalar => { 
+                .scalar => {
                     std.mem.replaceScalar(u8, self.items, needle, replacement);
                     return self;
                 },
@@ -1439,7 +1468,7 @@ fn MutableStringBackend(comptime Self: type) type {
                     const tree = comptime ParseRegexTree(needle);
                     const min_matches = comptime tree.minMatches();
 
-                    if (comptime min_matches == 0) 
+                    if (comptime min_matches == 0)
                         @compileError("replacment matches must be greater than zero");
 
                     std.debug.assert(replacement.len <= min_matches);
@@ -1448,9 +1477,7 @@ fn MutableStringBackend(comptime Self: type) type {
                     var w: usize = 0; // write
 
                     while (r < self.items.len) {
-
                         if (tree.call(self.items, r, false)) |match_end| {
-
                             if (r == match_end) {
                                 r += 1;
                                 continue;
@@ -1464,14 +1491,14 @@ fn MutableStringBackend(comptime Self: type) type {
 
                             continue;
                         }
-                        
+
                         self.items[w] = self.items[r];
                         r += 1;
                         w += 1;
                     }
 
                     return .{ .items = self.items[0..w] };
-                }
+                },
             }
         }
 
@@ -1648,35 +1675,35 @@ const FluentMode = std.mem.DelimiterType;
 
 fn isConst(comptime T: type) bool {
     switch (@typeInfo(T)) {
-        .Pointer => |ptr| return ptr.is_const,
+        .pointer => |ptr| return ptr.is_const,
         else => @compileError("Type must coercible to a slice."),
     }
 }
 
 fn isSlice(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Pointer => |ptr| ptr.size == .Slice,
+        .pointer => |ptr| ptr.size == .Slice,
         else => false,
     };
 }
 
 fn isInteger(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Int, .ComptimeInt => true,
+        .int, .comptime_int => true,
         else => false,
     };
 }
 
 fn isUnsigned(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Int => |i| i.signedness == .unsigned,
+        .int => |i| i.signedness == .unsigned,
         else => false,
     };
 }
 
 fn tupleSize(comptime tuple: anytype) usize {
     return switch (@typeInfo(@TypeOf(tuple))) {
-        .Struct => |s| s.fields.len,
+        .@"struct" => |s| s.fields.len,
         else => @compileError("type must be a tuple"),
     };
 }
@@ -1695,7 +1722,7 @@ inline fn identity(x: anytype) @TypeOf(x) {
 
 fn isFloat(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .Float => true,
+        .float => true,
         else => false,
     };
 }
@@ -1719,15 +1746,15 @@ fn DeepChild(comptime T: type) type {
     const C = Child(T);
 
     return switch (@typeInfo(C)) {
-        .Int, .Float => C,
-        .Array => |a| a.child,
+        .int, .float => C,
+        .array => |a| a.child,
         else => @compileError("Unsupported Type"),
     };
 }
 
 inline fn wrapIndex(len: usize, idx: anytype) usize {
     switch (@typeInfo(@TypeOf(idx))) {
-        .Int => |i| {
+        .int => |i| {
             if (comptime i.signedness == .unsigned) {
                 return idx;
             } else {
@@ -1735,7 +1762,7 @@ inline fn wrapIndex(len: usize, idx: anytype) usize {
                 return if (idx < 0) len - u else u;
             }
         },
-        .ComptimeInt => {
+        .comptime_int => {
             const u: usize = comptime @abs(idx);
             return if (comptime idx < 0) len - u else u;
         },
@@ -1749,11 +1776,11 @@ inline fn reduceInit(comptime op: ReduceOp, comptime T: type) T {
     return switch (op) {
         .Add => 0, // implicit cast
         .Mul => 1, // implicit cast
-        .Min => if (comptime info == .Int)
+        .Min => if (comptime info == .int)
             math.maxInt(T)
         else
             math.inf(T),
-        .Max => if (comptime info == .Int)
+        .Max => if (comptime info == .int)
             math.minInt(T)
         else
             -math.inf(T),
@@ -2137,9 +2164,15 @@ fn pipeSearch(
         switch (sq[i]) {
             .s => |s| switch (s.char) {
                 '|' => if (s.escaped) continue else return i,
-                '(' => if (s.escaped) continue else { i = closingBracket(sq, "()", i); },
-                '[' => if (s.escaped) continue else { i = closingBracket(sq, "[]", i); },
-                '{' => if (s.escaped) continue else { i = closingBracket(sq, "{}", i); },
+                '(' => if (s.escaped) continue else {
+                    i = closingBracket(sq, "()", i);
+                },
+                '[' => if (s.escaped) continue else {
+                    i = closingBracket(sq, "[]", i);
+                },
+                '{' => if (s.escaped) continue else {
+                    i = closingBracket(sq, "{}", i);
+                },
                 ')', ']', '}' => if (!s.escaped) @compileError("pipeSearch: invalid braces"),
                 else => continue,
             },
@@ -2155,7 +2188,6 @@ fn RegexOR(
     comptime rhs: type,
 ) type {
     return struct {
-
         pub fn minMatches() usize {
             if (comptime @hasDecl(rhs, "minMatches")) {
                 return @min(lhs.minMatches(), rhs.minMatches());
@@ -2163,7 +2195,7 @@ fn RegexOR(
                 return lhs.minMatches();
             }
         }
-        
+
         pub fn call(str: []const u8, i: usize, prev: bool) ?usize {
             if (comptime @hasDecl(rhs, "call")) {
                 return lhs.call(str, i, prev) orelse rhs.call(str, i, prev);
@@ -2176,7 +2208,6 @@ fn RegexOR(
 
 // implents [] syntax - optimization over OR branches...
 fn RegexCharset(comptime symbols: []const RegexSymbol) type {
-
     return struct {
         const Self = @This();
 
@@ -2195,13 +2226,12 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
         // to handle character-spans (ex: [a-z]), we first check
         // to see if we have any spans in our character set. If
         // we do not, we do a vectorized check across the whole
-        // set. If we do have character spans, we move those 
+        // set. If we do have character spans, we move those
         // characters to their own list and make separate checks
         // for the spans.
-                
+
         // memoize char array for easy access
         const impl = blk: {
-
             var char_len: usize = 0;
             var span_len: usize = 0;
             var func_len: usize = 0;
@@ -2212,19 +2242,17 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
             var i: usize = 0;
 
             while (i < symbols.len) {
-
                 if (isCharFunction(symbols[i].s.char) and symbols[i].s.escaped) {
                     func_set[func_len] = symbols[i].s.char;
                     func_len += 1;
                     i += 1;
                     continue;
                 }
-                
+
                 const j = i + 1;
                 const k = j + 1;
 
                 if (j < symbols.len and k < symbols.len and symbols[j].s.char == '-' and !symbols[j].s.escaped) {
-
                     if (symbols[i].s.char >= symbols[k].s.char)
                         @panic("Left side of char span must be less than right side: " ++ &[_]u8{ symbols[i].s.char, '-', symbols[k].s.char });
 
@@ -2240,7 +2268,7 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
                 i += 1;
             }
 
-            break :blk Self.SetImpl(char_len, span_len, func_len) {
+            break :blk Self.SetImpl(char_len, span_len, func_len){
                 .char_set = char_set[0..char_len].*,
                 .span_set = span_set[0..span_len].*,
                 .func_set = func_set[0..func_len].*,
@@ -2251,7 +2279,6 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
         const negated = symbols[0].s.negated;
 
         fn checkFunc(str: []const u8, i: usize) bool {
-
             if (comptime Self.impl.func_set.len == 0)
                 return false;
 
@@ -2265,15 +2292,13 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
         }
 
         fn checkChar(str: []const u8, i: usize) bool {
-
             if (comptime Self.impl.char_set.len == 0)
                 return false;
-            
+
             return std.mem.indexOfScalar(u8, Self.impl.char_set[0..], str[i]) != null;
         }
 
         fn checkSpan(str: []const u8, i: usize) bool {
-
             if (comptime Self.impl.span_set.len == 0)
                 return false;
 
@@ -2294,17 +2319,17 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
             // Character sets in PCRE do not respect zero-length
             // matches. It looks like they always increment by 1.
             // This means that things [\b]w+ will not match like
-            // \b\w+ like one would expect. 
+            // \b\w+ like one would expect.
 
             if (comptime !Self.negated) {
-                if (checkChar(str, i)) return i + 1;                            
+                if (checkChar(str, i)) return i + 1;
                 if (checkSpan(str, i)) return i + 1;
                 if (checkFunc(str, i)) return i + 1;
                 return null;
             } else {
                 const b = checkChar(str, i) or
-                          checkSpan(str, i) or
-                          checkFunc(str, i);                
+                    checkSpan(str, i) or
+                    checkFunc(str, i);
 
                 return if (!b) i + 1 else null;
             }
@@ -2312,13 +2337,11 @@ fn RegexCharset(comptime symbols: []const RegexSymbol) type {
     };
 }
 
-
 fn RegexAND(
     comptime lhs: type,
     comptime rhs: type,
 ) type {
     return struct {
-
         pub fn minMatches() usize {
             const matches: usize = blk: {
                 const q = lhs.quantifier orelse break :blk 1;
@@ -2348,11 +2371,10 @@ fn RegexAND(
             if (comptime !@hasDecl(rhs, "call")) {
                 if (comptime lhs.quantifier) |q| {
                     switch (q) {
-
                         .any => {
                             var idx: usize = i;
                             while (idx < str.len) {
-                                idx = lhs.call(str, idx, prev) orelse break; 
+                                idx = lhs.call(str, idx, prev) orelse break;
                             }
                             return if (prev or idx != i) idx else null;
                         },
@@ -2374,7 +2396,7 @@ fn RegexAND(
 
                             // check if new match has occured
                             const new_match = (i != idx) or prev;
-                            
+
                             while (count < b.stop and idx < str.len) : (count += 1) {
                                 idx = lhs.call(str, idx, new_match) orelse break;
                             }
@@ -2392,7 +2414,6 @@ fn RegexAND(
                         .optional => {
                             return lhs.call(str, i, prev) orelse if (prev) i else null;
                         },
-
                     }
                 } else {
                     return lhs.call(str, i, prev);
@@ -2489,7 +2510,7 @@ fn RegexLookAhead(
                 return if (comptime positive) i else null;
             }
         }
-    };            
+    };
 }
 
 fn RegexUnit(
@@ -2501,7 +2522,7 @@ fn RegexUnit(
         pub const quantifier = Quantifier;
         pub const info = @typeInfo(@TypeOf(callable));
         pub inline fn call(str: []const u8, i: usize, prev: bool) ?usize {
-            if (comptime info == .Fn) {
+            if (comptime info == .@"fn") {
                 // terminal function call..
                 return callable(str, i);
             } else {
@@ -2518,8 +2539,10 @@ fn RegexUnit(
 
 // TODO: consider moving into the charFunction call while parsing
 fn equalRegex(comptime char: u8) fn ([]const u8, i: usize) ?usize {
-    return struct { pub fn call(str: []const u8, i: usize) ?usize { 
-        return if (i < str.len and str[i] == char) i + 1 else null; } 
+    return struct {
+        pub fn call(str: []const u8, i: usize) ?usize {
+            return if (i < str.len and str[i] == char) i + 1 else null;
+        }
     }.call;
 }
 
@@ -2534,7 +2557,7 @@ fn endsWithRegex(str: []const u8, i: usize) ?usize {
 }
 
 // TODO: consider moving into the charFunction call while parsing
-fn anyRegex(_: []const u8, i: usize) ?usize {        
+fn anyRegex(_: []const u8, i: usize) ?usize {
     return i + 1;
 }
 
@@ -2544,24 +2567,23 @@ fn isWordCharacter(c: u8) bool {
 
 fn isVerticalWhitespace(c: u8) bool {
     return switch (c) {
-        '\n', '\x85', 
-        std.ascii.control_code.cr,
-        std.ascii.control_code.vt, 
-        std.ascii.control_code.ff => true,
+        '\n', '\x85', std.ascii.control_code.cr, std.ascii.control_code.vt, std.ascii.control_code.ff => true,
         else => false,
     };
 }
 
 fn isHorizontalWhitespace(c: u8) bool {
-    return switch (c) { ' ', '\t' => true, else => false };
+    return switch (c) {
+        ' ', '\t' => true,
+        else => false,
+    };
 }
 
 fn isWordBoundary(str: []const u8, i: usize) bool {
-    
     if (i == str.len)
         return isWordCharacter(str[i - 1]);
 
-    if (i == 0 and isWordCharacter(str[i])) 
+    if (i == 0 and isWordCharacter(str[i]))
         return true;
 
     if ((i + 1) == str.len and isWordCharacter(str[i]))
@@ -2580,40 +2602,33 @@ fn isWordBoundary(str: []const u8, i: usize) bool {
 
 pub fn isZeroLength(comptime c: u8) bool {
     return switch (c) {
-       'b', 'B' => true,
+        'b', 'B' => true,
         else => false,
     };
 }
 
 fn isCharFunction(comptime char: u8) bool {
     return switch (char) {
-        'w', 'W',
-        'd', 'D',
-        's', 'S',
-        'h', 'H',
-        'v', 'V', 
-        'b', 'B' => true,
+        'w', 'W', 'd', 'D', 's', 'S', 'h', 'H', 'v', 'V', 'b', 'B' => true,
         else => false,
     };
 }
 
 fn charFunction(
-    comptime char: u8, 
+    comptime char: u8,
     comptime negated: bool,
     str: []const u8,
     i: usize,
 ) ?usize {
-
     const c = comptime if (negated) negateChar(char) else char;
-    
-    return blk: {
 
+    return blk: {
         if (comptime isZeroLength(char)) {
 
             // Zero-length matches can have i == str.len
             // and always return i as their match, hence
             // "zero-length" match.
-            
+
             const b: bool = switch (comptime c) {
                 'b' => isWordBoundary(str, i),
                 'B' => !isWordBoundary(str, i),
@@ -2621,15 +2636,14 @@ fn charFunction(
             };
 
             break :blk if (b) i else null;
-
         } else {
 
             // Standard matches expect i < str.len
             // and advance i by 1.
 
-            if (i == str.len) 
+            if (i == str.len)
                 return null;
-            
+
             const b: bool = switch (comptime c) {
                 'w' => isWordCharacter(str[i]),
                 'W' => !isWordCharacter(str[i]),
@@ -2650,9 +2664,9 @@ fn charFunction(
 }
 
 pub fn BindCharFunction(
-    comptime char: u8,    
+    comptime char: u8,
     comptime negated: bool,
-) fn([]const u8, usize) callconv(.Inline) ?usize {
+) fn ([]const u8, usize) callconv(.Inline) ?usize {
     return struct {
         pub inline fn call(str: []const u8, i: usize) ?usize {
             return charFunction(char, negated, str, i);
@@ -2690,9 +2704,7 @@ fn ParseRegexTreeBreadth(comptime sq: []const RegexSymbol) type {
 }
 
 fn ParseRegexTreeDepth(comptime sq: []const RegexSymbol) type {
-
     comptime {
-
         if (sq.len == 0)
             return struct {}; // terminal node
 
@@ -2711,15 +2723,13 @@ fn ParseRegexTreeDepth(comptime sq: []const RegexSymbol) type {
                     // this will result in a segfault.
 
                     const T: type = sub: {
-
                         if (s.char == '[') {
                             break :sub RegexCharset(sq[1..closing]);
                         }
 
                         if (closing > 2 and s.char == '(') {
-
                             if (_sq[1] != .q or _sq[2] != .s) {
-                                break :sub ParseRegexTreeBreadth(sq[1..closing]);                                
+                                break :sub ParseRegexTreeBreadth(sq[1..closing]);
                             }
                             const t = _sq[1].q;
                             const u = _sq[2].s;
@@ -2767,15 +2777,14 @@ fn ParseRegexTreeDepth(comptime sq: []const RegexSymbol) type {
                 if (s.escaped and isCharFunction(s.char)) {
                     break :outer RegexUnit(BindCharFunction(s.char, s.negated), q);
                 } else {
-
                     if (!s.escaped) {
                         switch (s.char) {
                             '.' => break :outer RegexUnit(anyRegex, q),
-                            '^' => { 
+                            '^' => {
                                 if (q != null) @compileError("Symbol '^' cannot have a quantifier.");
                                 break :outer RegexUnit(startsWithRegex, null);
                             },
-                            '$' => { 
+                            '$' => {
                                 if (q != null) @compileError("Symbol '$' cannot have a quantifier.");
                                 break :outer RegexUnit(endsWithRegex, null);
                             },
@@ -3005,7 +3014,7 @@ test "getAt(self, idx)                          : scalar" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "startsWith(self, mode, needle)            : scalar" {
-    const items = [_]u32{0,1,2,3,4,5,6,7,8,9};
+    const items = [_]u32{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
     const self = init(items[0..]);
 
     {
@@ -3027,8 +3036,8 @@ test "startsWith(self, mode, needle)            : scalar" {
 //////////////////////////////////////////////////////////////////////////////////
 
 test "startsWith(self, mode, needle)           : sequence" {
-    const items = [_]u32{0,1,2,3,4,5,6,7,8,9};
-    const needle = [_]u32{0,1,2};
+    const items = [_]u32{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    const needle = [_]u32{ 0, 1, 2 };
     const self = init(items[0..]);
 
     {
@@ -3042,14 +3051,14 @@ test "startsWith(self, mode, needle)           : sequence" {
     }
 
     {
-        const result = self.startsWith(.sequence, &[_]u32{9,8,7});
+        const result = self.startsWith(.sequence, &[_]u32{ 9, 8, 7 });
         try expect(result == false);
     }
 }
 
 test "startsWith(self, mode, needle)           : any" {
-    const items = [_]u32{0,1,2,3,4,5,6,7,8,9};
-    const needle = [_]u32{0,1,2};
+    const items = [_]u32{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    const needle = [_]u32{ 0, 1, 2 };
     const self = init(items[0..]);
 
     {
@@ -3063,7 +3072,7 @@ test "startsWith(self, mode, needle)           : any" {
     }
 
     {
-        const result = self.startsWith(.any, &[_]u32{9,8,7});
+        const result = self.startsWith(.any, &[_]u32{ 9, 8, 7 });
         try expect(result == false);
     }
 }
@@ -3071,7 +3080,7 @@ test "startsWith(self, mode, needle)           : any" {
 ////////////////////////////////////////////////////////////////////////////////
 
 test "endsWith(self, mode, needle)             : scalar" {
-    const items = [_]u32{0,1,2,3,4,5,6,7,8,9};
+    const items = [_]u32{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
     const self = init(items[0..]);
 
     {
@@ -3091,45 +3100,44 @@ test "endsWith(self, mode, needle)             : scalar" {
 }
 
 test "endsWith(self, mode, needle)             : sequence" {
-    const items = [_]u32{0,1,2,3,4,5,6,7,8,9};
+    const items = [_]u32{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
     const self = init(items[0..]);
 
     {
-        const result = self.endsWith(.sequence, &[_]u32{7,8,9});
+        const result = self.endsWith(.sequence, &[_]u32{ 7, 8, 9 });
         try expect(result == true);
     }
 
     {
-        const result = self.endsWith(.sequence, &[_]u32{9,8,7});
+        const result = self.endsWith(.sequence, &[_]u32{ 9, 8, 7 });
         try expect(result == false);
     }
 
     {
-        const result = self.endsWith(.sequence, &[_]u32{6,8,9});
+        const result = self.endsWith(.sequence, &[_]u32{ 6, 8, 9 });
         try expect(result == false);
     }
 }
 
 test "endsWith(self, mode, needle)             : any" {
-    const items = [_]u32{0,1,2,3,4,5,6,7,8,9};
+    const items = [_]u32{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
     const self = init(items[0..]);
 
     {
-        const result = self.endsWith(.any, &[_]u32{7,8,9});
+        const result = self.endsWith(.any, &[_]u32{ 7, 8, 9 });
         try expect(result == true);
     }
 
     {
-        const result = self.endsWith(.any, &[_]u32{6,8,7});
+        const result = self.endsWith(.any, &[_]u32{ 6, 8, 7 });
         try expect(result == false);
     }
 
     {
-        const result = self.endsWith(.any, &[_]u32{7,8,2});
+        const result = self.endsWith(.any, &[_]u32{ 7, 8, 2 });
         try expect(result == false);
     }
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -3381,12 +3389,11 @@ test "split(self, mode, delimiter)              : SplitIterator" {
 
 test "isDigit(self)                             : bool" {
     const test_case = [_][]const u8{ "0", "0123456789", "oops!0123456789", "0123456789oops!" };
-    const expected = [_]bool{ true, true, false, false };  
+    const expected = [_]bool{ true, true, false, false };
     for (test_case, expected) |item, answer| {
         const result = init(item).isDigit();
         try expect(result == answer);
     }
-    
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3641,13 +3648,13 @@ test "trim(self, opt, kind, actor)              : scalar" {
         const result = init(buffer[0..source.len])
             .copy(source)
             .trim(.right, .scalar, ' ');
-        try expect(result.equal(source[0..source.len - 5]));
+        try expect(result.equal(source[0 .. source.len - 5]));
     }
     {
         const result = init(buffer[0..source.len])
             .copy(source)
             .trim(.all, .scalar, ' ');
-        try expect(result.equal(source[5..source.len - 5]));
+        try expect(result.equal(source[5 .. source.len - 5]));
     }
     {
         const result = init("a").trim(.all, .scalar, 'a');
@@ -4117,7 +4124,6 @@ test "regex-engine1                             : match iterator -> regex" {
     }
 }
 
-
 test "regex-engine3                             : match iterator -> regex" {
     {
         const expression = "\\d+";
@@ -4137,13 +4143,11 @@ test "regex-engine4                             : match iterator -> regex" {
 }
 
 test "regex-engine5                             : match iterator -> regex" {
-
-   const expression = "\\d*";
-   const string = "\\dDmW0123456789aa\\1:";
-   var itr = match(expression, string);
-   const result = itr.next().?.items;
-   try expectEqSlice(u8, "0123456789", result);
-
+    const expression = "\\d*";
+    const string = "\\dDmW0123456789aa\\1:";
+    var itr = match(expression, string);
+    const result = itr.next().?.items;
+    try expectEqSlice(u8, "0123456789", result);
 }
 
 test "regex-engine6                             : match iterator -> regex" {
@@ -4176,11 +4180,11 @@ test "regex-engine9                             : match iterator -> regex" {
 }
 
 test "regex-engine10                            : match iterator -> regex" {
-     const expression = "\\d{0,10}";
-     const string = "abc0123456789abc";
-     var itr = match(expression, string);
-     const result = itr.next().?.items;
-     try expectEqSlice(u8, "0123456789", result);
+    const expression = "\\d{0,10}";
+    const string = "abc0123456789abc";
+    var itr = match(expression, string);
+    const result = itr.next().?.items;
+    try expectEqSlice(u8, "0123456789", result);
 }
 
 test "regex-engine11                            : match iterator -> regex" {
@@ -4422,7 +4426,6 @@ test "regex-engine37                            : match iterator-> regex" {
 }
 
 test "regex-engine38                            : match iterator-> regex" {
-
     {
         const string = "Call us today at 123-456-7890 or 9876543210 to rewrite your DNA in Zig!";
         var itr = Fluent.match("\\d{3}-\\d{3}-\\d{4}|\\d{10}", string);
@@ -4438,13 +4441,13 @@ test "regex-engine38                            : match iterator-> regex" {
         try std.testing.expect(itr.next() == null);
     }
     {
-        const string = 
+        const string =
             "Stock  tip: \"buy dog food\" " ++
             "stock\ttips: \"Why bother\" " ++
             "StOck Tips: \"eat bread\" " ++
             "Stock   tips: \"get a job\" " ++
             "great stock tip: \"I like turtles\"";
-            
+
         var itr = Fluent.match("[sS]tock\\s{0,3}tips?: \"[^\"]+\"", string);
         try std.testing.expectEqualSlices(u8, "Stock  tip: \"buy dog food\"", itr.next().?.items);
         try std.testing.expectEqualSlices(u8, "stock\ttips: \"Why bother\"", itr.next().?.items);
@@ -4457,33 +4460,25 @@ test "regex-engine38                            : match iterator-> regex" {
 test "regex-engine39                            : fluent interface-> replace regex" {
     var buf: [100]u8 = undefined;
 
-    try std.testing.expect(
-        Fluent.init(buf[0..])
+    try std.testing.expect(Fluent.init(buf[0..])
         .copy("This is a test test test string.")
         .replace(.regex, "test", "cow")
-        .equal("This is a cow cow cow string.")
-    );
+        .equal("This is a cow cow cow string."));
 
-    try std.testing.expect(
-        Fluent.init(buf[0..])
+    try std.testing.expect(Fluent.init(buf[0..])
         .copy("This is a test test test string.")
         .replace(.regex, "t\\w{2,4}(?= )", "cow")
-        .equal("This is a cow cow cow string.")
-    );
+        .equal("This is a cow cow cow string."));
 
-    try std.testing.expect(
-        Fluent.init(buf[0..])
+    try std.testing.expect(Fluent.init(buf[0..])
         .copy("qaaq aa a aaa aba a")
         .replace(.regex, "a?a", "x")
-        .equal("qxq x x xx xbx x")
-    );
+        .equal("qxq x x xx xbx x"));
 
-    try std.testing.expect(
-        Fluent.init(buf[0..])
+    try std.testing.expect(Fluent.init(buf[0..])
         .copy("qaaq aa a aaa aba a")
         .replace(.regex, " ?a?a ?", "")
-        .equal("qqb")
-    );
+        .equal("qqb"));
 }
 
 test "regex-engine40                            : fluent interface-> word boundary" {
@@ -4492,7 +4487,7 @@ test "regex-engine40                            : fluent interface-> word bounda
     var itr = match(expr, string);
 
     const s = itr.span() orelse unreachable;
-    
+
     try testing.expectEqual(13, s.pos);
     try testing.expectEqual(17, s.end);
     try testing.expect(itr.span() == null);
