@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
 
     const lib = b.addStaticLibrary(.{
         .name = "Fluent",
-        .root_source_file = b.path("fluent.zig"),
+        .root_source_file = b.path("src/fluent.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
 
     const check = b.addStaticLibrary(.{
         .name = "Fluent",
-        .root_source_file = b.path("fluent.zig"),
+        .root_source_file = b.path("src/fluent.zig"),
         .target = target,
         .optimize = optimize,
         .use_llvm = false,
@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&check.step);
 
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("fluent.zig"),
+        .root_source_file = b.path("src/fluent.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -35,7 +35,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_lib_unit_tests.step);
 
     _ = b.addModule("Fluent", .{
-        .root_source_file = b.path("fluent.zig"),
+        .root_source_file = b.path("src/fluent.zig"),
         .target = target,
         .optimize = optimize,
     });
