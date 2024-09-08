@@ -4,7 +4,47 @@ A fluent-interface for chaining algorithms, iterating, and performing REGEX over
 
 # Installation
 
-Fluent is a single file implementation. Add the `fluent.zig` file to your project and import like any standard utility.
+## Installation
+You can install the library by adding it to the `build.zig.zon` file, either manually like so:
+```zig
+.{
+    ...
+    .dependencies = .{
+        .Fluent = .{
+            .url = "https://github.com/andrewCodeDev/Fluent/archive/refs/tags/release_2.3.3.tar.gz",
+            .hash = "...",
+        }
+    }
+    ...
+}
+```
+
+The hash can be found using the builtin command:
+```sh
+zig fetch https://github.com/andrewCodeDev/Fluent/archive/refs/tags/release_2.3.3.tar.gz
+```
+
+Or you can also add it automatically like so:
+```sh
+zig fetch --save https://github.com/andrewCodeDev/Fluent/archive/refs/tags/release_2.3.3.tar.gz
+```
+
+Then in the `build.zig`, you can add the following:
+```zig
+const Fluent = b.dependency("Fluent", .{
+    .target = target,
+    .optimize = optimize,
+});
+
+exe.root_module.addImport("Fluent", Fluent.module("Fluent"));
+```
+
+The name of the module (`Fluent`) can be changed to whatever you want.
+
+Finally in your code you can import the module using the following:
+```zig
+const Fluent = @import("Fluent");
+```
 
 # Examples
 
