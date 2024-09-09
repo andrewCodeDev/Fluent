@@ -38,23 +38,36 @@ const ParseRegexTree = fltregx.ParseRegexTree;
 // UNARY FN ADAPTER                                                          ///
 ////////////////////////////////////////////////////////////////////////////////
 
-const fltfnadapt = @import("unary_fn_adapter.zig");
+const fltfnadapt = @import("fluent_unary_fn_adapter.zig");
 const bind = fltfnadapt.bind;
 const Chain = fltfnadapt.Chain;
 const unwrap = fltfnadapt.unwrap;
 const BindReturn = fltfnadapt.BindReturn;
 
 ////////////////////////////////////////////////////////////////////////////////
+// ITERATOR IMPORTS                                                          ///
+////////////////////////////////////////////////////////////////////////////////
+const fltiter = @import("fluent_iterator.zig");
+const split = fltiter.split;
+const match = fltiter.match;
+const iterator = fltiter.iterator;
+const BaseIterator = fltiter.BaseIterator;
+const MatchIterator = fltiter.MatchIterator;
+const SplitIterator = fltiter.SplitIterator;
+const IteratorInterface = fltiter.IteratorInterface;
+const IteratorMode = fltiter.IteratorMode;
+
+////////////////////////////////////////////////////////////////////////////////
 // Public Fluent Interface Access Point                                      ///
 ////////////////////////////////////////////////////////////////////////////////
 
-const Fluent = @This();
+pub const Fluent = @This();
 
 pub fn init(slice: anytype) FluentInterface(@TypeOf(slice)) {
     return .{ .items = slice };
 }
 
-fn FluentInterface(comptime T: type) type {
+pub fn FluentInterface(comptime T: type) type {
     return struct {
         const Self = @This();
 
@@ -64,355 +77,10 @@ fn FluentInterface(comptime T: type) type {
 
         items: SliceType,
 
-        pub usingnamespace if (DataType == u8) blk: {
-            break :blk if (isConst(T))
-                ImmutableStringBackend(Self)
-            else
-                MutableStringBackend(Self);
-        } else blk: {
-            break :blk if (isConst(T))
-                ImmutableNumericBackend(Self)
-            else
-                MutableNumericBackend(Self);
-        };
+        ////////////////////////////////////////////////////////////////////////////////
+        /// GeneralImmutableBackend                                                  ///
+        ////////////////////////////////////////////////////////////////////////////////
 
-        pub fn iterator(
-            self: Self,
-            comptime mode: IteratorMode,
-        ) BaseIterator(DataType, mode) {
-            return Fluent.iterator(mode, self.items);
-        }
-    };
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Public Fluent Iterator Access Point                                      ////
-////////////////////////////////////////////////////////////////////////////////
-
-/// enum {forward, reverse}
-pub const IteratorMode = enum { forward, reverse };
-
-pub fn BaseIterator(comptime T: type, mode: IteratorMode) type {
-    return IteratorInterface(T, mode, void{}, identity);
-}
-
-pub fn iterator(
-    comptime mode: IteratorMode,
-    items: anytype,
-) BaseIterator(DeepChild(@TypeOf(items)), mode) {
-    const T = DeepChild(@TypeOf(items));
-
-    if (comptime !isSlice(@TypeOf(items))) {
-        return iterator(mode, @as([]const T, items));
-    }
-
-    const P = [*c]const T;
-
-    const ptr: P = if (comptime mode == .forward)
-        @as(P, @ptrCast(items.ptr))
-    else
-        (@as(P, @ptrCast(items.ptr)) + items.len) - 1;
-
-    const end: P = if (comptime mode == .forward)
-        @as(P, @ptrCast(items.ptr)) + items.len
-    else
-        @as(P, @ptrCast(items.ptr)) - 1;
-
-    return .{
-        .ptr = ptr,
-        .end = end,
-        .stride = 1,
-    };
-}
-
-pub fn MatchIterator(
-    comptime expression: []const u8,
-) type {
-    return struct {
-        const Self = @This();
-        const tree = ParseRegexTree(expression);
-        items: []const u8,
-        index: usize,
-
-        pub fn init(items: []const u8) Self {
-            return .{ .items = items, .index = 0 };
-        }
-
-        pub fn next(self: *Self) ?FluentInterface([]const u8) {
-            while (self.index < self.items.len) : (self.index += 1) {
-                if (tree.call(self.items, self.index, false)) |last| {
-
-                    // non-advancing calls
-                    if (self.index == last)
-                        continue;
-
-                    defer self.index = last;
-                    return Fluent.init(self.items[self.index..last]);
-                }
-            }
-            return null;
-        }
-
-        pub fn span(self: *Self) ?struct { pos: usize, end: usize } {
-            while (self.index < self.items.len) : (self.index += 1) {
-                if (tree.call(self.items, self.index, false)) |last| {
-
-                    // non-advancing calls
-                    if (self.index == last)
-                        continue;
-
-                    defer self.index = last;
-                    return .{ .pos = self.index, .end = last };
-                }
-            }
-            return null;
-        }
-    };
-}
-
-/// match - match substrings based on an expression
-pub fn match(
-    comptime expression: []const u8,
-    source: []const u8,
-) MatchIterator(expression) {
-    return MatchIterator(expression).init(source);
-}
-
-fn SplitIterator(comptime expression: []const u8) type {
-    return struct {
-        const Self = @This();
-        const tree = ParseRegexTree(expression);
-        items: []const u8,
-        index: ?usize,
-
-        pub fn init(items: []const u8) Self {
-            return .{ .items = items, .index = 0 };
-        }
-
-        pub fn next(self: *Self) ?FluentInterface([]const u8) {
-            const start = self.index orelse return null;
-            var stop: usize = start;
-            const end: ?usize = blk: {
-                while (stop < self.items.len) : (stop += 1) {
-                    const last = tree.call(self.items, stop, false) orelse continue;
-
-                    // non-advancing calls
-                    if (start == last)
-                        continue;
-
-                    break :blk last;
-                } else break :blk null;
-            };
-            defer self.index = end;
-            return Fluent.init(self.items[start..stop]);
-        }
-
-        pub fn span(self: *Self) struct { pos: usize, end: usize } {
-            const start = self.index orelse return null;
-            var stop: usize = start;
-            const end: ?usize = blk: {
-                while (stop < self.items.len) : (stop += 1) {
-                    const last = tree.call(self.items, stop, false) orelse continue;
-
-                    // non-advancing calls
-                    if (start == last)
-                        continue;
-
-                    break :blk last;
-                } else break :blk null;
-            };
-            defer self.index = end;
-            return .{ .pos = start, .end = stop };
-        }
-    };
-}
-
-/// split - splits a string based on a delimiting expression
-pub fn split(
-    comptime expression: []const u8,
-    source: []const u8,
-) SplitIterator(expression) {
-    return SplitIterator(expression).init(source);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//                        Backends and Implementation                         //
-////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////
-// Iterator Interface Implementation:                                         //
-////////////////////////////////////////////////////////////////////////////////
-
-fn IteratorInterface(
-    comptime DataType: type,
-    mode: IteratorMode,
-    comptime filters: anytype, // tuple or function
-    comptime transforms: anytype, // tuple or function
-) type {
-    return struct {
-        const Self = @This();
-        const Mode = mode;
-
-        ptr: [*c]const DataType,
-        end: [*c]const DataType,
-        stride: usize,
-
-        pub fn next(self: *Self) ?DataType {
-            if (comptime @TypeOf(filters) != void) {
-                // apply single filter or tuple of filters
-                switch (comptime @typeInfo(@TypeOf(filters))) {
-                    .@"fn" => {
-                        if (comptime Mode == .forward) {
-                            while (self.ptr < self.end and !filters(self.ptr.*))
-                                self.ptr += self.stride;
-                        } else {
-                            while (self.ptr > self.end and !filters(self.ptr.*))
-                                self.ptr -= self.stride;
-                        }
-                    },
-                    else => outer: { // applies inline filters
-                        if (comptime Mode == .forward) {
-                            inner: while (self.ptr < self.end) : (self.ptr += self.stride) {
-                                inline for (filters) |f| {
-                                    if (!f(self.ptr.*)) continue :inner;
-                                }
-                                break :outer;
-                            }
-                        } else {
-                            inner: while (self.ptr > self.end) : (self.ptr -= self.stride) {
-                                inline for (filters) |f| {
-                                    if (!f(self.ptr.*)) continue :inner;
-                                }
-                                break :outer;
-                            }
-                        }
-                    },
-                }
-            }
-
-            // unpack transforms into single transform call
-            const transform = comptime if (@typeInfo(@TypeOf(transforms)) == .@"fn")
-                transforms
-            else
-                Fluent.Chain(transforms).call;
-
-            switch (comptime Mode) {
-                .forward => {
-                    if (self.ptr < self.end) {
-                        defer self.ptr += self.stride;
-                        return @call(.always_inline, transform, .{self.ptr.*});
-                    }
-                },
-                .reverse => {
-                    if (self.ptr > self.end) {
-                        defer self.ptr -= self.stride;
-                        return @call(.always_inline, transform, .{self.ptr.*});
-                    }
-                },
-            }
-            return null;
-        }
-
-        /// strided - set iterator stride (default 1)
-        pub fn strided(
-            self: Self,
-            stride_size: usize,
-        ) Self {
-            return .{
-                .ptr = self.ptr,
-                .end = self.end,
-                .stride = stride_size,
-            };
-        }
-
-        /// window - return a slice and advance by stride
-        pub fn window(
-            self: *Self,
-            window_size: usize,
-        ) ?FluentInterface([]const DataType) {
-            switch (comptime Mode) {
-                .forward => {
-                    if (self.ptr + window_size <= self.end) {
-                        defer _ = self.next();
-                        return Fluent.init(self.ptr[0..window_size]);
-                    }
-                },
-                .reverse => {
-                    if ((self.ptr + 1) - window_size > self.end) {
-                        defer _ = self.next();
-                        return Fluent.init(((self.ptr + 1) - window_size)[0..window_size]);
-                    }
-                },
-            }
-            return null;
-        }
-
-        /// map - transforms every elment in the acquired slice with a given unary function
-        pub fn map(
-            self: Self,
-            comptime new_transforms: anytype,
-        ) IteratorInterface(DataType, Mode, filters, new_transforms) {
-            return .{
-                .ptr = self.ptr,
-                .end = self.end,
-                .stride = self.stride,
-            };
-        }
-
-        /// filter - acquire a unary predicate or a tuple of unary predicates
-        pub fn filter(
-            self: Self,
-            comptime new_filters: anytype,
-        ) IteratorInterface(DataType, Mode, new_filters, transforms) {
-            return .{
-                .ptr = self.ptr,
-                .end = self.end,
-                .stride = self.stride,
-            };
-        }
-
-        pub fn write(
-            self: anytype, // for both const and non-const pointers
-            items: []DataType,
-        ) usize {
-            // enable chaining without temporaries
-            if (comptime isConst(@TypeOf(self))) {
-                var tmp = self.*;
-                return tmp.write(items);
-            }
-            var count: usize = 0;
-            while (count < items.len) : (count += 1) {
-                items[count] = self.next() orelse return count;
-            }
-            return count;
-        }
-
-        pub fn reduce(
-            self: anytype, // for both const and non-const pointers
-            comptime T: type,
-            comptime binary_func: anytype, // single binary function
-            initial: T,
-        ) T {
-            // enable chaining without temporaries
-            if (comptime isConst(@TypeOf(self))) {
-                var tmp = self.*;
-                return tmp.reduce(T, binary_func, initial);
-            }
-            var rdx = initial;
-            while (self.next()) |x| {
-                rdx = @call(.always_inline, binary_func, .{ rdx, x });
-            }
-            return rdx;
-        }
-    };
-}
-
-////////////////////////////////////////////////////
-// GeneralBackend //////////////////////////////////
-
-pub fn GeneralImmutableBackend(comptime Self: type) type {
-    return struct {
-        /// all - check if all elements of the acquired slice are true by given predicate
         pub fn all(self: Self, predicate: fn (Self.DataType) bool) bool {
             return for (self.items) |x| {
                 if (!predicate(x)) break false;
@@ -597,27 +265,16 @@ pub fn GeneralImmutableBackend(comptime Self: type) type {
             }
             return .{ .items = join_buffer[0..curr_idx] };
         }
-    };
-}
 
-////////////////////////////////////////////////////////////////////////////////
-// IMMUTABLE BACKEND :                                                        //
-//                                                                            //
-// Used by mutable backend - only suports non-mutating                        //
-// operations over items. Primarily used for reducing,                        //
-// scanning, and indexing. Provides non-mutating iterator                     //
-// support for both Immutable and Mutable backends.                           //
-////////////////////////////////////////////////////////////////////////////////
-
-fn ImmutableNumericBackend(comptime Self: type) type {
-    return struct {
-        pub usingnamespace GeneralImmutableBackend(Self);
-
-        ///////////////////////
-        //  PUBLIC SECTION   //
-        ///////////////////////
-
-        /// findFrom - returns first index after a given position of scalar, slice, or any
+        pub fn iterator(
+            self: Self,
+            comptime mode: IteratorMode,
+        ) BaseIterator(DataType, mode) {
+            return Fluent.iterator(mode, self.items);
+        }
+        ////////////////////////////////////////////////////////////////////////////////
+        /// GeneralImmutableBackend                                                  ///
+        ////////////////////////////////////////////////////////////////////////////////
         pub fn findFrom(
             self: Self,
             comptime mode: FluentMode,
@@ -871,24 +528,6 @@ fn ImmutableNumericBackend(comptime Self: type) type {
             }
             return result;
         }
-    };
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// MUTABLE BACKEND                                                            //
-//                                                                            //
-// Only suports mutating operations on items.                                 //
-// Operations include sorting, replacing,                                     //
-// permutations, and partitioning.                                            //
-////////////////////////////////////////////////////////////////////////////////
-
-pub fn GeneralMutableBackend(comptime Self: type) type {
-    return struct {
-
-        // includes operations like reduce, find, and iterators
-        pub usingnamespace GeneralImmutableBackend(Self);
-
-        /// sort - sorts the range in ascending or descending order
         pub fn sort(self: Self, comptime direction: SortDirection) Self {
             const func = if (direction == .asc)
                 std.sort.asc(Self.DataType)
@@ -957,394 +596,16 @@ pub fn GeneralMutableBackend(comptime Self: type) type {
             random.shuffle(Self.DataType, self.items);
             return self;
         }
-    };
+
+        };
 }
 
-fn MutableNumericBackend(comptime Self: type) type {
-    return struct {
-        pub usingnamespace ImmutableNumericBackend(Self);
-
-        pub usingnamespace GeneralMutableBackend(Self);
-    };
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// IMMUTABLE BACKEND :                                                        //
-//                                                                            //
-// Only activated if the child data type is u8                                //
-////////////////////////////////////////////////////////////////////////////////
 
 const StringMode = enum { regex, scalar };
 
 fn ImmutableStringBackend(comptime Self: type) type {
     return struct {
-        pub usingnamespace GeneralImmutableBackend(Self);
 
-        ///////////////////////
-        //  PUBLIC SECTION   //
-        ///////////////////////
-
-        /// isDigit - returns true for [0-9]+
-        pub fn isDigit(self: Self) bool {
-            return self.all(std.ascii.isDigit);
-        }
-
-        /// isAlpha - returns true for [a-zA-z]+
-        pub fn isAlpha(self: Self) bool {
-            return self.all(std.ascii.isAlphabetic);
-        }
-
-        /// isSpaces - returns true for [\s]+
-        pub fn isSpaces(self: Self) bool {
-            return self.all(std.ascii.isWhitespace);
-        }
-
-        /// isLower - returns true for lowercase letters
-        pub fn isLower(self: Self) bool {
-            return self.all(std.ascii.isLower);
-        }
-
-        /// isUpper - returns true for uppercase letters
-        pub fn isUpper(self: Self) bool {
-            return self.all(std.ascii.isUpper);
-        }
-
-        /// isHex - returns true for hexadecimal characters [0-9a-fA-F]
-        pub fn isHex(self: Self) bool {
-            return self.all(std.ascii.isHex);
-        }
-
-        /// isASCII - returns true for ASCII characters
-        pub fn isASCII(self: Self) bool {
-            return self.all(std.ascii.isASCII);
-        }
-
-        /// isPrintable - returns true for printable ASCII characters
-        pub fn isPrintable(self: Self) bool {
-            return self.all(std.ascii.isPrint);
-        }
-
-        /// isAlnum - returns true for alphanumeric characters [a-zA-Z0-9]
-        pub fn isAlnum(self: Self) bool {
-            return self.all(std.ascii.isAlphanumeric);
-        }
-
-        /// digit - parses the string as an integer in base 10
-        pub fn digit(self: Self, comptime T: type) !T {
-            if (comptime !isInteger(T))
-                @compileError("digit: requires integer type.");
-
-            return std.fmt.parseInt(T, self.items, 10);
-        }
-
-        /// float - parses the string as a floating-point number
-        pub fn float(self: Self, comptime T: type) !T {
-            if (comptime !isFloat(T))
-                @compileError("float: requires floating-point type.");
-
-            return std.fmt.parseFloat(T, self.items);
-        }
-
-        /// float - parses the string as a floating-point number
-        pub fn cast(self: Self, comptime T: type) !T {
-            return switch (@typeInfo(T)) {
-                .int => self.digit(T),
-                .float => self.float(T),
-                else => @compileError("cast: requires floating point or integer types."),
-            };
-        }
-
-        // regex returns a range
-        const RegexFindResult = struct {
-            pos: usize,
-            end: usize,
-        };
-
-        /// findFrom - returns first index after a given position of scalar, slice, or any
-        pub fn findFrom(
-            self: Self,
-            comptime mode: StringMode,
-            start_index: usize,
-            comptime needle: Parameter(u8, mode),
-        ) switch (mode) {
-            .scalar => ?usize,
-            .regex => ?RegexFindResult,
-        } {
-            return switch (mode) {
-                .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
-                .regex => blk: {
-                    var itr = Fluent.match(needle, self.items[start_index..]);
-                    const x = itr.next() orelse break :blk null;
-                    break :blk RegexFindResult{ .pos = (itr.index - x.items.len) + start_index, .end = itr.index + start_index };
-                },
-            };
-        }
-
-        /// containsFrom - check if contains a given scalar, sequence, or any after a given index
-        pub fn containsFrom(
-            self: Self,
-            comptime mode: StringMode,
-            start_index: usize,
-            comptime needle: Parameter(u8, mode),
-        ) bool {
-            return findFrom(self, mode, start_index, needle) != null;
-        }
-
-        /// find - returns first index of scalar, slice, or any
-        pub fn find(
-            self: Self,
-            comptime mode: StringMode,
-            comptime needle: Parameter(u8, mode),
-        ) switch (mode) {
-            .scalar => ?usize,
-            .regex => ?RegexFindResult,
-        } {
-            return findFrom(self, mode, 0, needle);
-        }
-
-        /// contains - check if contains a given scalar, sequence, or any
-        pub fn contains(
-            self: Self,
-            comptime mode: StringMode,
-            comptime needle: Parameter(u8, mode),
-        ) bool {
-            return find(self, mode, needle) != null;
-        }
-
-        /// trim - trims left, right, or all based on any, sequence, or scalar
-        pub fn trim(
-            self: Self,
-            comptime direction: DirectionOption,
-            comptime mode: StringMode,
-            comptime needle: Parameter(u8, mode),
-        ) Self {
-            if (self.items.len == 0) return self;
-            return switch (direction) {
-                .left => .{ .items = self.items[trimLeft(self, mode, needle)..] },
-                .right => .{ .items = self.items[0..trimRight(self, mode, needle)] },
-                .all => self.trim(.left, mode, needle).trim(.right, mode, needle),
-            };
-        }
-
-        /// count - counts all, left, right given a scalar, sequence, or any
-        pub fn count(
-            self: Self,
-            comptime direction: DirectionOption,
-            comptime mode: StringMode,
-            comptime needle: Parameter(u8, mode),
-        ) usize {
-            return switch (direction) {
-                .all => countAll(self, mode, needle),
-                .left => countLeft(self, mode, needle),
-                .right => countRight(self, mode, needle),
-            };
-        }
-
-        ///////////////////////////////////////////////////
-        // Iterator support ///////////////////////////////
-
-        /// split - splits a string based on a delimiting expression
-        pub fn split(
-            self: Self,
-            comptime delimiter: []const u8,
-        ) Fluent.SplitIterator(delimiter) {
-            return Fluent.split(delimiter, self.items);
-        }
-
-        /// match - match substrings based on an expression
-        pub fn match(
-            self: Self,
-            comptime delimiter: []const u8,
-        ) Fluent.SplitIterator(delimiter) {
-            return Fluent.match(delimiter, self.items);
-        }
-
-        /// differenceWith - returns set diference between acquired slice and given slice
-        pub fn differenceWith(
-            self: Self,
-            string: []const u8,
-            diff_buffer: []u8,
-        ) FluentInterface([]u8) {
-            var items_set = StringBitSet.init();
-            var string_set = StringBitSet.init();
-
-            for (self.items) |item| {
-                items_set.setValue(item, true);
-            }
-
-            for (string) |char| {
-                string_set.setValue(char, true);
-            }
-            return .{ .items = items_set.differenceWith(string_set).fillBuffer(diff_buffer) };
-        }
-
-        /// unionWith - returns set union between acquired slice and given slice
-        pub fn unionWith(
-            self: Self,
-            string: []const u8,
-            union_buffer: []u8,
-        ) FluentInterface([]u8) {
-            var items_set = StringBitSet.init();
-            var string_set = StringBitSet.init();
-
-            for (self.items) |item| {
-                items_set.setValue(item, true);
-            }
-
-            for (string) |char| {
-                string_set.setValue(char, true);
-            }
-            return .{ .items = items_set.unionWith(string_set).fillBuffer(union_buffer) };
-        }
-
-        /// intersectWith - returns set intersection between acquired slice and given slice
-        pub fn intersectWith(
-            self: Self,
-            string: []const u8,
-            inter_buffer: []u8,
-        ) FluentInterface([]Self.DataType) {
-            var items_set = StringBitSet.init();
-            var string_set = StringBitSet.init();
-
-            for (self.items) |item| {
-                items_set.setValue(item, true);
-            }
-
-            for (string) |char| {
-                string_set.setValue(char, true);
-            }
-            return .{ .items = items_set.intersectWith(string_set).fillBuffer(inter_buffer) };
-        }
-
-        ///////////////////////
-        //  PRIVATE SECTION  //
-        ///////////////////////
-
-        fn trimLeft(
-            self: Self,
-            comptime mode: StringMode,
-            comptime needle: Parameter(u8, mode),
-        ) usize {
-            var start: usize = 0;
-            const end: usize = self.items.len;
-            switch (mode) {
-                .scalar => {
-                    while (start < end and self.items[start] == needle) start += 1;
-                },
-                .regex => {
-                    const expression = "^(" ++ needle ++ ")";
-                    var itr = Fluent.match(expression, self.items);
-                    if (itr.next()) |_| {
-                        start = itr.index;
-                    }
-                },
-            }
-            return start;
-        }
-
-        fn trimRight(
-            self: Self,
-            comptime mode: StringMode,
-            comptime needle: Parameter(u8, mode),
-        ) usize {
-            if (self.items.len <= 1) return 0;
-            var end: usize = self.items.len;
-            switch (mode) {
-                .scalar => {
-                    while (end > 0 and self.items[end - 1] == needle) end -= 1;
-                },
-                .regex => {
-                    const expression = "(" ++ needle ++ ")$";
-                    var itr = Fluent.match(expression, self.items);
-                    if (itr.next()) |str| {
-                        end = (itr.index - str.items.len);
-                    }
-                },
-            }
-            return end;
-        }
-
-        fn countAll(
-            self: Self,
-            comptime mode: StringMode,
-            comptime needle: Parameter(u8, mode),
-        ) usize {
-            var result: usize = 0;
-            switch (mode) {
-                .scalar => {
-                    for (self.items) |it| {
-                        if (it == needle) result += 1;
-                    }
-                },
-                .regex => {
-                    var itr = Fluent.match(needle, self.items);
-                    while (itr.next()) |_| {
-                        result += 1;
-                    }
-                },
-            }
-            return result;
-        }
-
-        fn countLeft(
-            self: Self,
-            comptime mode: StringMode,
-            comptime needle: Parameter(u8, mode),
-        ) usize {
-            return switch (mode) {
-                .scalar => blk: {
-                    var index: usize = 0;
-                    while (index < self.items.len and self.items[index] == needle) {
-                        index += 1;
-                    }
-                    break :blk index;
-                },
-                .regex => blk: {
-                    const tree = ParseRegexTree(needle);
-                    var index: usize = 0;
-                    var amount: usize = 0;
-                    while (tree.call(self.items, index, false)) |n| : (index += n) {
-                        amount += 1;
-                    }
-                    break :blk amount;
-                },
-            };
-        }
-
-        fn countRight(
-            self: Self,
-            comptime mode: StringMode,
-            comptime needle: Parameter(u8, mode),
-        ) usize {
-            return switch (mode) {
-                .scalar => blk: {
-                    var index: usize = self.items.len;
-                    var amount: usize = 0;
-                    while (index >= 1) {
-                        index -= 1;
-                        if (needle != self.items[index]) break :blk amount;
-                        amount += 1;
-                    }
-                    break :blk amount;
-                },
-                .regex => blk: {
-                    const tree = ParseRegexTree(needle);
-                    var index: usize = 0;
-                    var amount: usize = 0;
-                    while (true) : ({
-                        index += 1;
-                        amount = 0;
-                    }) {
-                        while (tree.call(self.items, index, false)) |n| : (index += n) {
-                            amount += 1;
-                        }
-                        if (index >= self.items.len) break :blk amount;
-                    }
-                },
-            };
-        }
-    };
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // MUTABLE BACKEND :                                                          //
