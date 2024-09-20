@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const StringBitSet = struct {
+pub const StringBitSet = struct {
     const BackingSet = std.StaticBitSet(@bitSizeOf(usize));
 
     bits: [4]BackingSet,

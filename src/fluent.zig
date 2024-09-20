@@ -70,6 +70,13 @@ const SampleOption = fltenum.SampleOption;
 const FluentMode = fltenum.FluentMode;
 
 ////////////////////////////////////////////////////////////////////////////////
+// STATIC BITSET IMPORTS                                                     ///
+////////////////////////////////////////////////////////////////////////////////
+const fltstbset = @import("fluent_static_bitset.zig");
+
+const StringBitSet = fltstbset.StringBitSet;
+
+////////////////////////////////////////////////////////////////////////////////
 // Public Fluent Interface Access Point                                      ///
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -280,46 +287,47 @@ pub fn FluentInterface(comptime T: type) type {
             return Fluent.iterator(mode, self.items);
         }
 
-        pub fn findFrom(
-            self: Self,
-            comptime mode: FluentMode,
-            start_index: usize,
-            needle: Parameter(Self.DataType, mode),
-        ) ?usize {
-            return switch (mode) {
-                .any => std.mem.indexOfAnyPos(Self.DataType, self.items, start_index, needle),
-                .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
-                .sequence => std.mem.indexOfPos(Self.DataType, self.items, start_index, needle),
-            };
-        }
+        // pub fn findFrom(
+        //     self: Self,
+        //     comptime mode: FluentMode,
+        //     start_index: usize,
+        //     needle: Parameter(Self.DataType, mode),
+        // ) ?usize {
+        //     return switch (mode) {
+        //         .any => std.mem.indexOfAnyPos(Self.DataType, self.items, start_index, needle),
+        //         .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
+        //         .sequence => std.mem.indexOfPos(Self.DataType, self.items, start_index, needle),
+        //     };
+        // }
 
         /// containsFrom - check if contains a given scalar, sequence, or any after a given index
-        pub fn containsFrom(
-            self: Self,
-            comptime mode: FluentMode,
-            start_index: usize,
-            needle: Parameter(Self.DataType, mode),
-        ) bool {
-            return findFrom(self, mode, start_index, needle) != null;
-        }
+
+        // pub fn containsFrom(
+        //     self: Self,
+        //     comptime mode: FluentMode,
+        //     start_index: usize,
+        //     needle: Parameter(Self.DataType, mode),
+        // ) bool {
+        //     return findFrom(self, mode, start_index, needle) != null;
+        // }
 
         /// find - returns first index of scalar, slice, or any
-        pub fn find(
-            self: Self,
-            comptime mode: FluentMode,
-            needle: Parameter(Self.DataType, mode),
-        ) ?usize {
-            return findFrom(self, mode, 0, needle);
-        }
+        // pub fn find(
+        //     self: Self,
+        //     comptime mode: FluentMode,
+        //     needle: Parameter(Self.DataType, mode),
+        // ) ?usize {
+        //     return findFrom(self, mode, 0, needle);
+        // }
 
         /// contains - check if contains a given scalar, sequence, or any
-        pub fn contains(
-            self: Self,
-            comptime mode: FluentMode,
-            needle: Parameter(Self.DataType, mode),
-        ) bool {
-            return find(self, mode, needle) != null;
-        }
+        // pub fn contains(
+        //     self: Self,
+        //     comptime mode: FluentMode,
+        //     needle: Parameter(Self.DataType, mode),
+        // ) bool {
+        //     return find(self, mode, needle) != null;
+        // }
 
         /// startsWith - checks if the acquired slice starts with a scalar, sequence, or any
         pub fn startsWith(
@@ -362,177 +370,178 @@ pub fn FluentInterface(comptime T: type) type {
         }
 
         /// count - counts all, left, right given a scalar, sequence, or any
-        pub fn count(
-            self: Self,
-            direction: DirectionOption,
-            comptime mode: FluentMode,
-            needle: Parameter(Self.DataType, mode),
-        ) usize {
-            if (self.items.len == 0) return 0;
+        // pub fn count(
+        //     self: Self,
+        //     direction: DirectionOption,
+        //     comptime mode: FluentMode,
+        //     needle: Parameter(Self.DataType, mode),
+        // ) usize {
+        //     if (self.items.len == 0) return 0;
 
-            return switch (direction) {
-                .all => countAll(self, mode, needle),
-                .left => countLeft(self, mode, needle),
-                .right => countRight(self, mode, needle),
-            };
-        }
+        //     return switch (direction) {
+        //         .all => countAll(self, mode, needle),
+        //         .left => countLeft(self, mode, needle),
+        //         .right => countRight(self, mode, needle),
+        //     };
+        // }
 
         /// trim - trims left, right, or all based on any, sequence, or scalar
-        pub fn trim(
-            self: Self,
-            comptime direction: DirectionOption,
-            comptime option: TrimOptions,
-            comptime needle: Parameter(Self.DataType, option),
-        ) Self {
-            if (self.items.len == 0) return self;
-            return switch (direction) {
-                .left => .{ .items = self.items[trimLeft(self, option, needle)..] },
-                .right => .{ .items = self.items[0..trimRight(self, option, needle)] },
-                .all => self.trim(.left, option, needle).trim(.right, option, needle),
-            };
-        }
+        // pub fn trim(
+        //     self: Self,
+        //     comptime direction: DirectionOption,
+        //     comptime option: TrimOptions,
+        //     comptime needle: Parameter(Self.DataType, option),
+        // ) Self {
+        //     if (self.items.len == 0) return self;
+        //     return switch (direction) {
+        //         .left => .{ .items = self.items[trimLeft(self, option, needle)..] },
+        //         .right => .{ .items = self.items[0..trimRight(self, option, needle)] },
+        //         .all => self.trim(.left, option, needle).trim(.right, option, needle),
+        //     };
+        // }
 
-        ///////////////////////////////////////////////////
-        // Iterator support ///////////////////////////////
+        // ///////////////////////////////////////////////////
+        // // Iterator support ///////////////////////////////
 
-        pub fn split(
-            self: Self,
-            comptime mode: std.mem.DelimiterType,
-            delimiter: Parameter(Self.DataType, mode),
-        ) std.mem.SplitIterator(Self.DataType, mode) {
-            return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
-        }
+        // pub fn split(
+        //     self: Self,
+        //     comptime mode: std.mem.DelimiterType,
+        //     delimiter: Parameter(Self.DataType, mode),
+        // ) std.mem.SplitIterator(Self.DataType, mode) {
+        //     return .{ .index = 0, .buffer = self.items, .delimiter = delimiter };
+        // }
 
         ///////////////////////
         //  PRIVATE SECTION  //
         ///////////////////////
 
-        fn trimLeft(
-            self: Self,
-            comptime opt: TrimOptions,
-            actor: Parameter(Self.DataType, opt),
-        ) usize {
-            var start: usize = 0;
-            const end: usize = self.items.len;
-            switch (opt) {
-                .scalar => {
-                    while (start < end and self.items[start] == actor) start += 1;
-                },
-                .predicate => {
-                    while (start < end and actor(self.items[start])) start += 1;
-                },
-                .any => {
-                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[start]) != null) start += 1;
-                },
-            }
-            return start;
-        }
+        // fn trimLeft(
+        //     self: Self,
+        //     comptime opt: TrimOptions,
+        //     actor: Parameter(Self.DataType, opt),
+        // ) usize {
+        //     var start: usize = 0;
+        //     const end: usize = self.items.len;
+        //     switch (opt) {
+        //         .scalar => {
+        //             while (start < end and self.items[start] == actor) start += 1;
+        //         },
+        //         .predicate => {
+        //             while (start < end and actor(self.items[start])) start += 1;
+        //         },
+        //         .any => {
+        //             while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[start]) != null) start += 1;
+        //         },
+        //     }
+        //     return start;
+        // }
 
-        fn trimRight(
-            self: Self,
-            comptime opt: TrimOptions,
-            actor: Parameter(Self.DataType, opt),
-        ) usize {
-            const start: usize = 0;
-            var end: usize = self.items.len;
-            switch (opt) {
-                .scalar => {
-                    while (end > start and self.items[end - 1] == actor) end -= 1;
-                },
-                .predicate => {
-                    while (end > start and actor(self.items[end - 1])) end -= 1;
-                },
-                .any => {
-                    while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[end - 1]) != null) end -= 1;
-                },
-            }
-            return end;
-        }
+        // fn trimRight(
+        //     self: Self,
+        //     comptime opt: TrimOptions,
+        //     actor: Parameter(Self.DataType, opt),
+        // ) usize {
+        //     const start: usize = 0;
+        //     var end: usize = self.items.len;
+        //     switch (opt) {
+        //         .scalar => {
+        //             while (end > start and self.items[end - 1] == actor) end -= 1;
+        //         },
+        //         .predicate => {
+        //             while (end > start and actor(self.items[end - 1])) end -= 1;
+        //         },
+        //         .any => {
+        //             while (start < end and std.mem.indexOfScalar(Self.DataType, actor, self.items[end - 1]) != null) end -= 1;
+        //         },
+        //     }
+        //     return end;
+        // }
 
-        fn countAll(
-            self: Self,
-            comptime mode: FluentMode,
-            needle: Parameter(Self.DataType, mode),
-        ) usize {
-            var result: usize = 0;
+        // fn countAll(
+        //     self: Self,
+        //     comptime mode: FluentMode,
+        //     needle: Parameter(Self.DataType, mode),
+        // ) usize {
+        //     var result: usize = 0;
 
-            switch (mode) {
-                .scalar => {
-                    for (self.items) |it| {
-                        if (it == needle) result += 1;
-                    }
-                },
-                .sequence => result = std.mem.count(Self.DataType, self.items, needle),
-                .any => {
-                    for (self.items) |it| {
-                        for (needle) |n| {
-                            if (it == n) result += 1;
-                        }
-                    }
-                },
-            }
-            return (result);
-        }
+        //     switch (mode) {
+        //         .scalar => {
+        //             for (self.items) |it| {
+        //                 if (it == needle) result += 1;
+        //             }
+        //         },
+        //         .sequence => result = std.mem.count(Self.DataType, self.items, needle),
+        //         .any => {
+        //             for (self.items) |it| {
+        //                 for (needle) |n| {
+        //                     if (it == n) result += 1;
+        //                 }
+        //             }
+        //         },
+        //     }
+        //     return (result);
+        // }
 
-        fn countLeft(
-            self: Self,
-            comptime mode: FluentMode,
-            needle: Parameter(Self.DataType, mode),
-        ) usize {
-            var result: usize = 0;
-            switch (mode) {
-                .scalar => {
-                    for (self.items, 0..) |it, i| {
-                        if (it != needle) return (i);
-                    }
-                },
-                .sequence => {
-                    var win_iter = std.mem.window(Self.DataType, self.items, needle.len, needle.len);
-                    while (win_iter.next()) |win| : (result += 1) {
-                        if (std.mem.eql(Self.DataType, win, needle) == false) break;
-                    }
-                },
-                .any => {
-                    for (self.items) |it| {
-                        if (std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{it}) == false) break;
-                        result += 1;
-                    }
-                },
-            }
-            return (result);
-        }
+        // fn countLeft(
+        //     self: Self,
+        //     comptime mode: FluentMode,
+        //     needle: Parameter(Self.DataType, mode),
+        // ) usize {
+        //     var result: usize = 0;
+        //     switch (mode) {
+        //         .scalar => {
+        //             for (self.items, 0..) |it, i| {
+        //                 if (it != needle) return (i);
+        //             }
+        //         },
+        //         .sequence => {
+        //             var win_iter = std.mem.window(Self.DataType, self.items, needle.len, needle.len);
+        //             while (win_iter.next()) |win| : (result += 1) {
+        //                 if (std.mem.eql(Self.DataType, win, needle) == false) break;
+        //             }
+        //         },
+        //         .any => {
+        //             for (self.items) |it| {
+        //                 if (std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{it}) == false) break;
+        //                 result += 1;
+        //             }
+        //         },
+        //     }
+        //     return (result);
+        // }
 
-        fn countRight(
-            self: Self,
-            comptime mode: FluentMode,
-            needle: Parameter(Self.DataType, mode),
-        ) usize {
-            var result: usize = 0;
-            switch (mode) {
-                .scalar => {
-                    var itr = Fluent.iterator(.reverse, self.items);
-                    while (itr.next()) |item| : (result += 1) {
-                        if (item != needle) break;
-                    }
-                },
-                .sequence => {
-                    if (self.items.len < needle.len) return 0;
-                    var start = self.items.len - needle.len;
-                    while (start != 0) : (start -|= needle.len) {
-                        const win = self.items[start .. start + needle.len];
-                        if (!std.mem.eql(Self.DataType, win, needle)) break;
-                        result += 1;
-                    }
-                },
-                .any => {
-                    var itr = Fluent.iterator(.reverse, self.items);
-                    while (itr.next()) |item| : (result += 1) {
-                        if (!std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{item})) break;
-                    }
-                },
-            }
-            return result;
-        }
+        // fn countRight(
+        //     self: Self,
+        //     comptime mode: FluentMode,
+        //     needle: Parameter(Self.DataType, mode),
+        // ) usize {
+        //     var result: usize = 0;
+        //     switch (mode) {
+        //         .scalar => {
+        //             var itr = Fluent.iterator(.reverse, self.items);
+        //             while (itr.next()) |item| : (result += 1) {
+        //                 if (item != needle) break;
+        //             }
+        //         },
+        //         .sequence => {
+        //             if (self.items.len < needle.len) return 0;
+        //             var start = self.items.len - needle.len;
+        //             while (start != 0) : (start -|= needle.len) {
+        //                 const win = self.items[start .. start + needle.len];
+        //                 if (!std.mem.eql(Self.DataType, win, needle)) break;
+        //                 result += 1;
+        //             }
+        //         },
+        //         .any => {
+        //             var itr = Fluent.iterator(.reverse, self.items);
+        //             while (itr.next()) |item| : (result += 1) {
+        //                 if (!std.mem.containsAtLeast(Self.DataType, needle, 1, &[_]Self.DataType{item})) break;
+        //             }
+        //         },
+        //     }
+        //     return result;
+        // }
+
         pub fn sort(self: Self, comptime direction: SortDirection) Self {
             const func = if (direction == .asc)
                 std.sort.asc(Self.DataType)
@@ -698,6 +707,366 @@ pub fn FluentInterface(comptime T: type) type {
                 prev = self.items[i];
             }
             return self;
+        }
+
+        /// isDigit - returns true for [0-9]+
+        pub fn isDigit(self: Self) bool {
+            return self.all(std.ascii.isDigit);
+        }
+
+        /// isAlpha - returns true for [a-zA-z]+
+        pub fn isAlpha(self: Self) bool {
+            return self.all(std.ascii.isAlphabetic);
+        }
+
+        /// isSpaces - returns true for [\s]+
+        pub fn isSpaces(self: Self) bool {
+            return self.all(std.ascii.isWhitespace);
+        }
+
+        /// isLower - returns true for lowercase letters
+        pub fn isLower(self: Self) bool {
+            return self.all(std.ascii.isLower);
+        }
+
+        /// isUpper - returns true for uppercase letters
+        pub fn isUpper(self: Self) bool {
+            return self.all(std.ascii.isUpper);
+        }
+
+        /// isHex - returns true for hexadecimal characters [0-9a-fA-F]
+        pub fn isHex(self: Self) bool {
+            return self.all(std.ascii.isHex);
+        }
+
+        /// isASCII - returns true for ASCII characters
+        pub fn isASCII(self: Self) bool {
+            return self.all(std.ascii.isASCII);
+        }
+
+        /// isPrintable - returns true for printable ASCII characters
+        pub fn isPrintable(self: Self) bool {
+            return self.all(std.ascii.isPrint);
+        }
+
+        /// isAlnum - returns true for alphanumeric characters [a-zA-Z0-9]
+        pub fn isAlnum(self: Self) bool {
+            return self.all(std.ascii.isAlphanumeric);
+        }
+
+        /// digit - parses the string as an integer in base 10
+        pub fn digit(self: Self, comptime K: type) !K {
+            if (comptime !isInteger(K))
+                @compileError("digit: requires integer type.");
+
+            return std.fmt.parseInt(K, self.items, 10);
+        }
+
+        /// float - parses the string as a floating-point number
+        pub fn float(self: Self, comptime K: type) !K {
+            if (comptime !isFloat(K))
+                @compileError("float: requires floating-point type.");
+
+            return std.fmt.parseFloat(K, self.items);
+        }
+
+        /// float - parses the string as a floating-point number
+        pub fn cast(self: Self, comptime K: type) !K {
+            return switch (@typeInfo(K)) {
+                .int => self.digit(K),
+                .float => self.float(K),
+                else => @compileError("cast: requires floating point or integer types."),
+            };
+        }
+
+        // regex returns a range
+        const RegexFindResult = struct {
+            pos: usize,
+            end: usize,
+        };
+
+        /// findFrom - returns first index after a given position of scalar, slice, or any
+        pub fn findFrom(
+            self: Self,
+            comptime mode: StringMode,
+            start_index: usize,
+            comptime needle: Parameter(u8, mode),
+        ) switch (mode) {
+            .scalar => ?usize,
+            .regex => ?RegexFindResult,
+        } {
+            return switch (mode) {
+                .scalar => std.mem.indexOfScalarPos(Self.DataType, self.items, start_index, needle),
+                .regex => blk: {
+                    var itr = Fluent.match(needle, self.items[start_index..]);
+                    const x = itr.next() orelse break :blk null;
+                    break :blk RegexFindResult{ .pos = (itr.index - x.items.len) + start_index, .end = itr.index + start_index };
+                },
+            };
+        }
+
+        /// containsFrom - check if contains a given scalar, sequence, or any after a given index
+        pub fn containsFrom(
+            self: Self,
+            comptime mode: StringMode,
+            start_index: usize,
+            comptime needle: Parameter(u8, mode),
+        ) bool {
+            return findFrom(self, mode, start_index, needle) != null;
+        }
+
+        /// find - returns first index of scalar, slice, or any
+        pub fn find(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) switch (mode) {
+            .scalar => ?usize,
+            .regex => ?RegexFindResult,
+        } {
+            return findFrom(self, mode, 0, needle);
+        }
+
+        /// contains - check if contains a given scalar, sequence, or any
+        pub fn contains(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) bool {
+            return find(self, mode, needle) != null;
+        }
+
+        /// trim - trims left, right, or all based on any, sequence, or scalar
+        pub fn trim(
+            self: Self,
+            comptime direction: DirectionOption,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) Self {
+            if (self.items.len == 0) return self;
+            return switch (direction) {
+                .left => .{ .items = self.items[trimLeft(self, mode, needle)..] },
+                .right => .{ .items = self.items[0..trimRight(self, mode, needle)] },
+                .all => self.trim(.left, mode, needle).trim(.right, mode, needle),
+            };
+        }
+
+        /// count - counts all, left, right given a scalar, sequence, or any
+        pub fn count(
+            self: Self,
+            comptime direction: DirectionOption,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            return switch (direction) {
+                .all => countAll(self, mode, needle),
+                .left => countLeft(self, mode, needle),
+                .right => countRight(self, mode, needle),
+            };
+        }
+
+        ///////////////////////////////////////////////////
+        // Iterator support ///////////////////////////////
+
+        /// split - splits a string based on a delimiting expression
+        pub fn split(
+            self: Self,
+            comptime delimiter: []const u8,
+        ) Fluent.SplitIterator(delimiter) {
+            return Fluent.split(delimiter, self.items);
+        }
+
+        /// match - match substrings based on an expression
+        pub fn match(
+            self: Self,
+            comptime delimiter: []const u8,
+        ) Fluent.SplitIterator(delimiter) {
+            return Fluent.match(delimiter, self.items);
+        }
+
+        /// differenceWith - returns set diference between acquired slice and given slice
+        pub fn differenceWith(
+            self: Self,
+            string: []const u8,
+            diff_buffer: []u8,
+        ) FluentInterface([]u8) {
+            var items_set = StringBitSet.init();
+            var string_set = StringBitSet.init();
+
+            for (self.items) |item| {
+                items_set.setValue(item, true);
+            }
+
+            for (string) |char| {
+                string_set.setValue(char, true);
+            }
+            return .{ .items = items_set.differenceWith(string_set).fillBuffer(diff_buffer) };
+        }
+
+        /// unionWith - returns set union between acquired slice and given slice
+        pub fn unionWith(
+            self: Self,
+            string: []const u8,
+            union_buffer: []u8,
+        ) FluentInterface([]u8) {
+            var items_set = StringBitSet.init();
+            var string_set = StringBitSet.init();
+
+            for (self.items) |item| {
+                items_set.setValue(item, true);
+            }
+
+            for (string) |char| {
+                string_set.setValue(char, true);
+            }
+            return .{ .items = items_set.unionWith(string_set).fillBuffer(union_buffer) };
+        }
+
+        /// intersectWith - returns set intersection between acquired slice and given slice
+        pub fn intersectWith(
+            self: Self,
+            string: []const u8,
+            inter_buffer: []u8,
+        ) FluentInterface([]Self.DataType) {
+            var items_set = StringBitSet.init();
+            var string_set = StringBitSet.init();
+
+            for (self.items) |item| {
+                items_set.setValue(item, true);
+            }
+
+            for (string) |char| {
+                string_set.setValue(char, true);
+            }
+            return .{ .items = items_set.intersectWith(string_set).fillBuffer(inter_buffer) };
+        }
+
+        ///////////////////////
+        //  PRIVATE SECTION  //
+        ///////////////////////
+
+        fn trimLeft(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            var start: usize = 0;
+            const end: usize = self.items.len;
+            switch (mode) {
+                .scalar => {
+                    while (start < end and self.items[start] == needle) start += 1;
+                },
+                .regex => {
+                    const expression = "^(" ++ needle ++ ")";
+                    var itr = Fluent.match(expression, self.items);
+                    if (itr.next()) |_| {
+                        start = itr.index;
+                    }
+                },
+            }
+            return start;
+        }
+
+        fn trimRight(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            if (self.items.len <= 1) return 0;
+            var end: usize = self.items.len;
+            switch (mode) {
+                .scalar => {
+                    while (end > 0 and self.items[end - 1] == needle) end -= 1;
+                },
+                .regex => {
+                    const expression = "(" ++ needle ++ ")$";
+                    var itr = Fluent.match(expression, self.items);
+                    if (itr.next()) |str| {
+                        end = (itr.index - str.items.len);
+                    }
+                },
+            }
+            return end;
+        }
+
+        fn countAll(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            var result: usize = 0;
+            switch (mode) {
+                .scalar => {
+                    for (self.items) |it| {
+                        if (it == needle) result += 1;
+                    }
+                },
+                .regex => {
+                    var itr = Fluent.match(needle, self.items);
+                    while (itr.next()) |_| {
+                        result += 1;
+                    }
+                },
+            }
+            return result;
+        }
+
+        fn countLeft(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            return switch (mode) {
+                .scalar => blk: {
+                    var index: usize = 0;
+                    while (index < self.items.len and self.items[index] == needle) {
+                        index += 1;
+                    }
+                    break :blk index;
+                },
+                .regex => blk: {
+                    const tree = ParseRegexTree(needle);
+                    var index: usize = 0;
+                    var amount: usize = 0;
+                    while (tree.call(self.items, index, false)) |n| : (index += n) {
+                        amount += 1;
+                    }
+                    break :blk amount;
+                },
+            };
+        }
+
+        fn countRight(
+            self: Self,
+            comptime mode: StringMode,
+            comptime needle: Parameter(u8, mode),
+        ) usize {
+            return switch (mode) {
+                .scalar => blk: {
+                    var index: usize = self.items.len;
+                    var amount: usize = 0;
+                    while (index >= 1) {
+                        index -= 1;
+                        if (needle != self.items[index]) break :blk amount;
+                        amount += 1;
+                    }
+                    break :blk amount;
+                },
+                .regex => blk: {
+                    const tree = ParseRegexTree(needle);
+                    var index: usize = 0;
+                    var amount: usize = 0;
+                    while (true) : ({
+                        index += 1;
+                        amount = 0;
+                    }) {
+                        while (tree.call(self.items, index, false)) |n| : (index += n) {
+                            amount += 1;
+                        }
+                        if (index >= self.items.len) break :blk amount;
+                    }
+                },
+            };
         }
     };
 }
