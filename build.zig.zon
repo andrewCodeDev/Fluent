@@ -2,7 +2,7 @@
     .name = "Fluent",
     .version = "2.1.0",
     .paths = .{
-        "fluent.zig",
+        "src",
         "LICENSE",
         "README.md",
         "build.zig.zon",
